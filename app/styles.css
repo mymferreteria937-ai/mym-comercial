@@ -885,3 +885,28 @@ body.role-CAJERO .adminOnly{
   display:none!important;
 }
 body.role-CAJERO #roleSelect{display:none!important;}
+
+/* V8 Seguridad y permisos */
+.users-security-layout{display:grid;grid-template-columns:minmax(330px,430px) 1fr;gap:16px;align-items:start}.security-user-form{position:sticky;top:14px}.form-title-row,.permission-head,.table-toolbar,.user-actions{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.form-title-row h3,.table-toolbar h3,.permission-head h4{margin:0}.form-title-row p,.table-toolbar p,.permission-head p{margin:6px 0 0;color:#94a3b8;font-size:13px;line-height:1.35}.permission-panel{border:1px solid rgba(148,163,184,.18);border-radius:18px;padding:14px;margin:8px 0 14px;background:rgba(2,6,23,.24)}.permissions-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}.permission-check{display:flex;align-items:center;gap:9px;border:1px solid rgba(148,163,184,.16);border-radius:14px;padding:10px 11px;background:rgba(15,23,42,.46);font-size:12px;font-weight:850;color:#dbeafe;cursor:pointer;transition:.18s ease}.permission-check:hover{border-color:rgba(249,115,22,.42);transform:translateY(-1px)}.permission-check input{width:16px;height:16px;accent-color:#f97316}.form-actions-row{display:flex;gap:10px;align-items:center}.table-toolbar{margin-bottom:12px}.table-toolbar input{max-width:280px;width:100%}.users-table-wrap{overflow:auto}.users-table{min-width:980px}.users-table th{position:sticky;top:0;z-index:1}.users-table td{vertical-align:middle}.status-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:950;border:1px solid rgba(148,163,184,.20)}.status-pill.active{color:#bbf7d0;background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.28)}.status-pill.inactive{color:#fecaca;background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.28)}.perm-chips{display:flex;flex-wrap:wrap;gap:5px;max-width:300px}.perm-chip{border:1px solid rgba(148,163,184,.16);border-radius:999px;padding:4px 7px;font-size:11px;color:#cbd5e1;background:rgba(15,23,42,.45)}.action-mini{padding:8px 10px;border-radius:12px;font-size:12px;font-weight:900}.action-danger{background:rgba(239,68,68,.16)!important;border:1px solid rgba(239,68,68,.28)!important;color:#fecaca!important}.action-warn{background:rgba(245,158,11,.16)!important;border:1px solid rgba(245,158,11,.28)!important;color:#fde68a!important}.hidden-by-permission{display:none!important}@media(max-width:1150px){.users-security-layout{grid-template-columns:1fr}.security-user-form{position:relative;top:auto}.permissions-grid{grid-template-columns:1fr}.table-toolbar{display:block}.table-toolbar input{max-width:none;margin-top:10px}}
+
+/* V13.1 - UX de cambio/restablecimiento de contraseña */
+.forced-password-panel-v131{display:grid;gap:10px;margin-top:16px;animation:fadeUpV131 .25s ease both;}
+.forced-head-v131{border:1px solid rgba(249,115,22,.25);background:rgba(249,115,22,.08);border-radius:18px;padding:14px 16px;margin-bottom:4px;}
+.forced-head-v131 h2{margin:0 0 6px;color:#fff;font-size:20px;}
+.forced-head-v131 p{margin:0;color:#cbd5e1;font-size:13px;line-height:1.4;}
+.system-modal-v131{position:fixed;inset:0;z-index:200000;background:rgba(2,6,23,.76);backdrop-filter:blur(12px);display:grid;place-items:center;padding:20px;}
+.system-modal-v131.hidden{display:none!important;}
+.system-modal-card-v131{width:min(520px,94vw);background:linear-gradient(180deg,#111827,#07111f);border:1px solid rgba(148,163,184,.28);box-shadow:0 35px 90px rgba(0,0,0,.58),0 0 55px rgba(249,115,22,.10);border-radius:26px;padding:22px;color:#f8fafc;animation:fadeUpV131 .22s ease both;}
+.system-modal-head-v131{display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(148,163,184,.16);padding-bottom:14px;margin-bottom:14px;}
+.system-modal-head-v131 h3{margin:0;font-size:22px;}
+#systemModalCloseV131{width:34px;height:34px;padding:0;border-radius:12px;background:rgba(148,163,184,.12);color:#e5e7eb;font-size:22px;line-height:1;}
+.system-modal-body-v131{display:grid;gap:12px;color:#cbd5e1;}
+.modal-note-v131{margin:0;line-height:1.45;color:#cbd5e1;}
+.credential-box-v131{border:1px solid rgba(148,163,184,.18);background:rgba(15,23,42,.60);border-radius:16px;padding:12px 14px;display:grid;gap:5px;}
+.credential-box-v131 span{color:#94a3b8;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;}
+.credential-box-v131 b{color:#fff;font-size:16px;word-break:break-all;}
+.warning-box-v131{border:1px solid rgba(245,158,11,.30);background:rgba(245,158,11,.10);color:#fde68a;border-radius:16px;padding:12px 14px;font-weight:800;font-size:13px;}
+.modal-inline-actions-v131{display:flex;gap:10px;flex-wrap:wrap;}
+.modal-inline-actions-v131 button{background:rgba(148,163,184,.12);color:#e5e7eb;border:1px solid rgba(148,163,184,.20);}
+.system-modal-actions-v131{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+@keyframes fadeUpV131{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}

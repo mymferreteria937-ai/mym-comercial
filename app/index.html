@@ -19,7 +19,7 @@
       </div>
       <form id="loginForm" class="login-form">
         <label>Usuario</label>
-        <input id="loginUsername" autocomplete="username" placeholder="jurguen.marin" required>
+        <input id="loginUsername" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Usuario asignado" required>
         <label>Contraseña</label>
         <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña" required>
         <button class="primary wide" type="submit">Ingresar al sistema</button>
@@ -36,15 +36,18 @@
   <div id="passwordChangeModal" class="password-modal hidden">
     <div class="password-card">
       <div class="password-head">
-        <h2>Cambio de contraseña requerido</h2>
-        <p>Por seguridad, debe crear una nueva contraseña antes de ingresar al sistema.</p>
+        <h2 id="passwordChangeTitle">Cambio de contraseña</h2>
+        <p id="passwordChangeHelp">Por seguridad, cree una nueva contraseña para su usuario.</p>
       </div>
       <form id="passwordChangeForm" class="login-form">
+        <label>Contraseña actual</label>
+        <input id="currentPassword" type="password" autocomplete="current-password" placeholder="Solo requerida si ya inició sesión">
         <label>Nueva contraseña</label>
-        <input id="newPassword" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" minlength="6" required>
+        <input id="newPassword" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" minlength="8" required>
         <label>Confirmar contraseña</label>
-        <input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Repita la contraseña" minlength="6" required>
-        <button class="primary wide" type="submit">Guardar contraseña e ingresar</button>
+        <input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Repita la contraseña" minlength="8" required>
+        <button id="passwordChangeSubmit" class="primary wide" type="submit">Guardar contraseña</button>
+        <button id="passwordChangeCancel" class="ghost wide hidden" type="button">Cancelar</button>
         <div id="passwordChangeMessage" class="login-message"></div>
       </form>
     </div>
@@ -467,13 +470,76 @@
     </section>
 
     <section id="users" class="view">
-      <div class="split"><form id="userForm" class="panel form"><h3>Usuario del sistema</h3><input type="hidden" id="userId"><input id="userName" required placeholder="Nombre"><input id="userEmail" placeholder="Correo"><input id="userPhone" placeholder="Teléfono"><select id="userRole"><option>ADMIN</option><option>SUPERVISOR</option><option>CAJERO</option><option>BODEGA</option></select><select id="userStatus"><option>ACTIVE</option><option>INACTIVE</option></select><button class="primary">Guardar usuario</button></form><div class="panel"><table id="usersTable"></table></div></div>
+      <div class="section-header">
+        <div>
+          <h2>Usuarios, roles y permisos</h2>
+          <p>Administra accesos por pantalla, estado de usuarios y contraseñas temporales.</p>
+        </div>
+      </div>
+      <div class="users-security-layout">
+        <form id="userForm" class="panel form security-user-form">
+          <div class="form-title-row">
+            <div>
+              <h3 id="userFormTitle">Nuevo usuario</h3>
+              <p id="userFormHelp">Al crear un usuario se asigna contraseña temporal y cambio obligatorio. El usuario de acceso no se publica en la pantalla de login.</p>
+            </div>
+            <button id="cancelUserEdit" type="button" class="ghost hidden">Cancelar edición</button>
+          </div>
+          <input type="hidden" id="userId">
+          <input id="userName" required placeholder="Nombre completo">
+          <input id="userUsername" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Usuario de acceso">
+          <input id="userEmail" placeholder="Correo">
+          <input id="userPhone" placeholder="Teléfono">
+          <select id="userRole">
+            <option>ADMIN</option>
+            <option>SUPERVISOR</option>
+            <option>CAJERO</option>
+            <option>BODEGA</option>
+            <option>CONSULTA</option>
+          </select>
+          <select id="userStatus">
+            <option value="active">Activo</option>
+            <option value="inactive">Inactivo</option>
+          </select>
+          <div class="permission-panel">
+            <div class="permission-head">
+              <div>
+                <h4>Permisos por pantalla</h4>
+                <p>Marca los módulos visibles para este usuario.</p>
+              </div>
+              <button id="applyRoleTemplate" type="button" class="ghost">Aplicar plantilla del rol</button>
+            </div>
+            <div id="permissionsGrid" class="permissions-grid"></div>
+          </div>
+          <div class="form-actions-row">
+            <button class="primary" id="saveUserBtn">Guardar usuario</button>
+          </div>
+        </form>
+        <div class="panel users-table-panel">
+          <div class="table-toolbar">
+            <div>
+              <h3>Usuarios registrados</h3>
+              <p>Editar, inactivar o resetear contraseña sin tocar SQL.</p>
+            </div>
+            <input id="userSearch" placeholder="Buscar usuario, nombre o rol">
+          </div>
+          <div class="users-table-wrap"><table id="usersTable"></table></div>
+        </div>
+      </div>
     </section>
 
     <section id="promos" class="view"><div class="panel"><h3>Promociones sugeridas y manuales</h3><div id="promoManager" class="promoList"></div></div></section>
     <section id="profitability" class="view"><div class="panel"><div class="toolbar"><select id="profitFilter"><option value="top">Mayor ganancia</option><option value="low">Menor ganancia</option><option value="margin-low">Margen bajo</option></select></div><h3 id="profitTitle">Rentabilidad</h3><table id="profitTable"></table></div></section>
     <section id="sales" class="view"><div class="panel"><h3>Ventas recientes</h3><table id="salesTable"></table></div></section>
-    <section id="settings" class="view"><div class="panel"><h3>Configuración</h3><p>Margen estándar 35%, precios redondeados hacia arriba y cuentas bancarias configurables en <code>config.js</code>.</p></div></section>
+    <section id="settings" class="view">
+      <div class="panel">
+        <h3>Configuración</h3>
+        <p>Margen estándar 35%, precios redondeados hacia arriba y cuentas bancarias configurables en <code>config.js</code>.</p>
+        <div class="toolbar">
+          <button id="changePasswordBtn" class="primary" type="button">Cambiar mi contraseña</button>
+        </div>
+      </div>
+    </section>
   </main>
 
 

@@ -3133,6 +3133,7 @@ setTimeout(()=>{bindExchangeV111(); syncExchangeRatesToFormV112(); renderDashboa
 ===================================================== */
 let currentUserV114 = null;
 let pendingPasswordUserV114 = null;
+let passwordChangeModeV114 = 'initial';
 const MAX_LOGIN_ATTEMPTS_V114 = 5;
 
 async function sha256V114(text){
@@ -3201,16 +3202,53 @@ async function clearFailedLoginV114(user){
     }).eq('id',user.id);
   }catch(_e){}
 }
+function configurePasswordModalV114(mode='initial'){
+  passwordChangeModeV114=mode;
+  const isInitial=mode==='initial';
+  const title=$('#passwordChangeTitle');
+  const help=$('#passwordChangeHelp');
+  const current=$('#currentPassword');
+  const submit=$('#passwordChangeSubmit');
+  const cancel=$('#passwordChangeCancel');
+  if(title) title.textContent=isInitial?'Cambio de contraseña requerido':'Cambiar mi contraseña';
+  if(help) help.textContent=isInitial
+    ? 'Por seguridad, debe crear una nueva contraseña antes de ingresar al sistema.'
+    : 'Ingrese su contraseña actual y defina una nueva contraseña.';
+  if(current){
+    current.value='';
+    current.required=!isInitial;
+    current.style.display=isInitial?'none':'';
+    const label=current.previousElementSibling;
+    if(label) label.style.display=isInitial?'none':'';
+  }
+  if(submit) submit.textContent=isInitial?'Guardar contraseña e ingresar':'Actualizar contraseña';
+  if(cancel) cancel.classList.toggle('hidden', isInitial);
+}
 function showPasswordChangeV114(user){
   pendingPasswordUserV114=user;
+  configurePasswordModalV114('initial');
   const modal=$('#passwordChangeModal');
   if(modal) modal.classList.remove('hidden');
   setPasswordChangeMessageV114('');
   setLoginMessageV114('Debe cambiar su contraseña para continuar.', true);
   setTimeout(()=>$('#newPassword')?.focus(),80);
 }
+function openVoluntaryPasswordChangeV114(){
+  const raw=localStorage.getItem('mm_session_user');
+  let sessionUser=null;
+  try{ sessionUser=raw?JSON.parse(raw):null; }catch(_e){}
+  if(!sessionUser?.username){ alert('Debe iniciar sesión para cambiar su contraseña.'); return; }
+  pendingPasswordUserV114=sessionUser;
+  configurePasswordModalV114('voluntary');
+  const modal=$('#passwordChangeModal');
+  if(modal) modal.classList.remove('hidden');
+  if($('#passwordChangeForm')) $('#passwordChangeForm').reset();
+  setPasswordChangeMessageV114('');
+  setTimeout(()=>$('#currentPassword')?.focus(),80);
+}
 function hidePasswordChangeV114(){
   pendingPasswordUserV114=null;
+  passwordChangeModeV114='initial';
   const modal=$('#passwordChangeModal');
   if(modal) modal.classList.add('hidden');
   if($('#passwordChangeForm')) $('#passwordChangeForm').reset();
@@ -3279,6 +3317,7 @@ async function loginV114(e){
     return;
   }
   if(needsPasswordChangeV114(user)){
+    user.__login_hash = hash;
     showPasswordChangeV114(user);
     return;
   }
@@ -3291,13 +3330,29 @@ async function loginV114(e){
 async function changeInitialPasswordV114(e){
   e.preventDefault();
   if(!pendingPasswordUserV114){ setPasswordChangeMessageV114('Sesión temporal no encontrada. Vuelva a ingresar.'); return; }
+
+  const isVoluntary=passwordChangeModeV114==='voluntary';
+  let user=pendingPasswordUserV114;
+
+  // En cambio voluntario se vuelve a leer el usuario desde Supabase y se valida la contraseña actual.
+  if(isVoluntary){
+    try{ user=await findUserV114(user.username); }
+    catch(_err){ setPasswordChangeMessageV114('No se pudo validar el usuario actual.'); return; }
+    if(!user){ setPasswordChangeMessageV114('Usuario no encontrado.'); return; }
+    const currentPass=$('#currentPassword')?.value||'';
+    const currentHash=await sha256V114(currentPass);
+    const validCurrent = String(user.password_hash||'') === currentHash || String(user.password_hash||'') === currentPass;
+    if(!validCurrent){ setPasswordChangeMessageV114('La contraseña actual no es correcta.'); return; }
+  }
+
   const p1=$('#newPassword')?.value||'';
   const p2=$('#confirmPassword')?.value||'';
   if(p1.length<8){ setPasswordChangeMessageV114('La contraseña debe tener al menos 8 caracteres.'); return; }
   if(p1!==p2){ setPasswordChangeMessageV114('Las contraseñas no coinciden.'); return; }
   if(p1==='123456'){ setPasswordChangeMessageV114('Use una contraseña diferente a la temporal.'); return; }
+
   const hash=await sha256V114(p1);
-  const updated={...pendingPasswordUserV114, password_hash:hash, must_change_password:false, last_login_at:nowIsoV114(), failed_login_attempts:0, locked_until:null};
+  const updated={...user, password_hash:hash, must_change_password:false, last_login_at:nowIsoV114(), failed_login_attempts:0, locked_until:null};
   try{
     const r=await sb.from('app_users').update({
       password_hash:hash,
@@ -3306,18 +3361,25 @@ async function changeInitialPasswordV114(e){
       locked_until:null,
       last_login_at:nowIsoV114(),
       updated_at:nowIsoV114()
-    }).eq('id',pendingPasswordUserV114.id);
+    }).eq('id',user.id);
     if(r.error) throw r.error;
   }catch(err){
     console.error(err);
     setPasswordChangeMessageV114('No se pudo guardar la contraseña. Revise permisos/RLS.');
     return;
   }
-  await auditLoginV114(updated,'PASSWORD_CHANGE','SUCCESS','Cambio obligatorio completado');
+
+  await auditLoginV114(updated,'PASSWORD_CHANGE','SUCCESS',isVoluntary?'Cambio voluntario completado':'Cambio obligatorio completado');
   hidePasswordChangeV114();
   if($('#loginPassword')) $('#loginPassword').value='';
-  setLoginMessageV114('Contraseña actualizada. Acceso correcto.', true);
-  applySessionV114(updated);
+
+  if(isVoluntary){
+    alert('Contraseña actualizada correctamente.');
+    applySessionV114(updated);
+  }else{
+    setLoginMessageV114('Contraseña actualizada. Acceso correcto.', true);
+    applySessionV114(updated);
+  }
 }
 function logoutV114(){
   const raw=localStorage.getItem('mm_session_user');
@@ -3332,6 +3394,8 @@ function logoutV114(){
 function bindLoginPortalV114(){
   if($('#loginForm')) $('#loginForm').onsubmit=loginV114;
   if($('#passwordChangeForm')) $('#passwordChangeForm').onsubmit=changeInitialPasswordV114;
+  if($('#passwordChangeCancel')) $('#passwordChangeCancel').onclick=hidePasswordChangeV114;
+  if($('#changePasswordBtn')) $('#changePasswordBtn').onclick=openVoluntaryPasswordChangeV114;
   if($('#logoutBtn')) $('#logoutBtn').onclick=logoutV114;
   if(!restoreSessionV114()) lockSessionV114();
 }
@@ -3365,3 +3429,664 @@ saveUser = async function(e){
   $('#userForm').reset(); await loadAll();
 };
 setTimeout(bindLoginPortalV114, 250);
+
+/* =========================================================
+   V8 - Seguridad, usuarios y permisos por pantalla
+   ========================================================= */
+const PERMISSION_CATALOG_V8 = [
+  ['dashboard','Dashboard'],
+  ['pos','POS Pro'],
+  ['clients','Clientes CRM'],
+  ['products','Inventario'],
+  ['barcode','Códigos / Etiquetas'],
+  ['cash','Cajas y Cierres'],
+  ['exchange','Mesa de Cambio'],
+  ['users','Usuarios'],
+  ['promos','Promociones'],
+  ['profitability','Rentabilidad'],
+  ['sales','Ventas'],
+  ['settings','Configuración']
+];
+const ROLE_PERMISSIONS_V8 = {
+  ADMIN: Object.fromEntries(PERMISSION_CATALOG_V8.map(([k])=>[k,true])),
+  SUPERVISOR: {dashboard:true,pos:true,clients:true,products:true,barcode:true,cash:true,exchange:true,users:false,promos:true,profitability:true,sales:true,settings:false},
+  CAJERO: {dashboard:true,pos:true,clients:true,products:false,barcode:false,cash:true,exchange:true,users:false,promos:false,profitability:false,sales:true,settings:false},
+  BODEGA: {dashboard:true,pos:false,clients:false,products:true,barcode:true,cash:false,exchange:false,users:false,promos:false,profitability:false,sales:false,settings:false},
+  CONSULTA: {dashboard:true,pos:false,clients:true,products:true,barcode:false,cash:false,exchange:false,users:false,promos:false,profitability:false,sales:true,settings:false}
+};
+let editingUserIdV8 = null;
+function normalizeStatusV8(status){return String(status||'active').toLowerCase()==='inactive'?'inactive':'active'}
+function getRoleTemplateV8(role){return {...(ROLE_PERMISSIONS_V8[String(role||'CAJERO').toUpperCase()]||ROLE_PERMISSIONS_V8.CAJERO)};}
+function normalizePermissionsV8(user){
+  const role=String(user?.role||'CAJERO').toUpperCase();
+  const base=getRoleTemplateV8(role);
+  const custom=(user?.permissions && typeof user.permissions==='object')?user.permissions:{};
+  return {...base,...custom};
+}
+function currentPermissionsV8(){
+  try{
+    const raw=localStorage.getItem('mm_session_user');
+    const u=raw?JSON.parse(raw):null;
+    return normalizePermissionsV8(u||currentUserV114||{role:currentRole});
+  }catch(_e){return normalizePermissionsV8({role:currentRole});}
+}
+function canAccessV8(view){
+  if(String(currentRole||'').toUpperCase()==='ADMIN') return true;
+  return currentPermissionsV8()[view]===true;
+}
+function applyNavigationPermissionsV8(){
+  const perms=currentPermissionsV8();
+  document.querySelectorAll('nav button[data-view]').forEach(btn=>{
+    const view=btn.dataset.view;
+    const allowed=String(currentRole||'').toUpperCase()==='ADMIN' || perms[view]===true;
+    btn.classList.toggle('hidden-by-permission', !allowed);
+  });
+}
+function firstAllowedViewV8(){
+  const perms=currentPermissionsV8();
+  const first=PERMISSION_CATALOG_V8.find(([k])=>String(currentRole||'').toUpperCase()==='ADMIN'||perms[k]===true);
+  return first?first[0]:'dashboard';
+}
+const applyRoleV8Base = applyRole;
+applyRole = function(){
+  applyRoleV8Base();
+  applyNavigationPermissionsV8();
+  if(String(currentRole||'').toUpperCase()!=='ADMIN'){
+    document.querySelectorAll('.adminOnly').forEach(el=>el.classList.toggle('adminLocked', !canAccessV8('settings')));
+  }
+};
+const showViewV8Base = showView;
+showView = function(id,btn){
+  if(!canAccessV8(id)){
+    const fallback=firstAllowedViewV8();
+    alert('No tiene permisos para acceder a este módulo.');
+    const fb=document.querySelector(`nav button[data-view="${fallback}"]`);
+    return showViewV8Base(fallback,fb);
+  }
+  return showViewV8Base(id,btn);
+};
+const applySessionV8Base = applySessionV114;
+applySessionV114 = function(user){
+  const normalized={...user, permissions: normalizePermissionsV8(user)};
+  currentUserV114=normalized;
+  currentRole=normalized?.role || 'CAJERO';
+  localStorage.setItem('mm_session_user', JSON.stringify({
+    id:normalized.id||null,
+    username:normalized.username,
+    name:normalized.name,
+    role:normalized.role,
+    permissions: normalized.permissions,
+    login_at:nowIsoV114()
+  }));
+  localStorage.setItem('mm_role', currentRole);
+  localStorage.setItem('mm_user_id', normalized.id||'');
+  localStorage.setItem('mm_user_name', normalized.name||normalized.username||'');
+  document.body.classList.remove('auth-locked');
+  document.body.classList.remove('role-ADMIN','role-SUPERVISOR','role-CAJERO','role-BODEGA','role-CONSULTA');
+  document.body.classList.add('role-'+currentRole);
+  if($('#roleSelect')){ $('#roleSelect').value=currentRole; $('#roleSelect').disabled=true; }
+  if($('#currentUserBadge')) $('#currentUserBadge').textContent=`${normalized.name || normalized.username} · ${currentRole}`;
+  applyRole();
+};
+function renderPermissionGridV8(perms){
+  const grid=$('#permissionsGrid');
+  if(!grid) return;
+  const p=perms||getRoleTemplateV8($('#userRole')?.value||'CAJERO');
+  grid.innerHTML=PERMISSION_CATALOG_V8.map(([key,label])=>`<label class="permission-check"><input type="checkbox" data-perm="${key}" ${p[key]?'checked':''}>${label}</label>`).join('');
+}
+function readPermissionGridV8(){
+  const result={};
+  document.querySelectorAll('#permissionsGrid input[data-perm]').forEach(chk=>{result[chk.dataset.perm]=chk.checked;});
+  return result;
+}
+
+function generateAccessUserV9(){
+  const rnd = Math.random().toString(36).slice(2,8);
+  return `u${rnd}`;
+}
+function maskAccessUserV9(username){
+  const u=String(username||'').trim();
+  if(!u) return 'No definido';
+  if(u.length<=4) return '••••';
+  return `${u.slice(0,2)}••••${u.slice(-2)}`;
+}
+function resetUserFormV8(){
+  editingUserIdV8=null;
+  const f=$('#userForm'); if(f) f.reset();
+  if($('#userId')) $('#userId').value='';
+  if($('#userUsername')) $('#userUsername').value='';
+  if($('#userRole')) $('#userRole').disabled=false;
+  if($('#userFormTitle')) $('#userFormTitle').textContent='Nuevo usuario';
+  if($('#userFormHelp')) $('#userFormHelp').textContent='Al crear un usuario se asigna contraseña temporal 123456 y cambio obligatorio.';
+  if($('#saveUserBtn')) $('#saveUserBtn').textContent='Guardar usuario';
+  if($('#cancelUserEdit')) $('#cancelUserEdit').classList.add('hidden');
+  if($('#userStatus')) $('#userStatus').value='active';
+  renderPermissionGridV8(getRoleTemplateV8($('#userRole')?.value||'CAJERO'));
+}
+function fillUserFormV8(user){
+  editingUserIdV8=user.id;
+  if($('#userId')) $('#userId').value=user.id||'';
+  if($('#userName')) $('#userName').value=user.name||'';
+  if($('#userUsername')) $('#userUsername').value=user.username||'';
+  if($('#userEmail')) $('#userEmail').value=user.email||'';
+  if($('#userPhone')) $('#userPhone').value=user.phone||'';
+  if($('#userRole')) $('#userRole').value=String(user.role||'CAJERO').toUpperCase();
+  if($('#userStatus')) $('#userStatus').value=normalizeStatusV8(user.status);
+  if($('#userFormTitle')) $('#userFormTitle').textContent='Editar usuario';
+  if($('#userFormHelp')) $('#userFormHelp').textContent=`Editando a ${user.username||user.name}. Los permisos se aplican al próximo ingreso.`;
+  if($('#saveUserBtn')) $('#saveUserBtn').textContent='Actualizar usuario';
+  if($('#cancelUserEdit')) $('#cancelUserEdit').classList.remove('hidden');
+  renderPermissionGridV8(normalizePermissionsV8(user));
+  setTimeout(()=>$('#userName')?.focus(),40);
+}
+window.editUserV8 = function(id){
+  if(!guardAdmin()) return;
+  const u=users.find(x=>x.id===id); if(!u) return alert('Usuario no encontrado.');
+  fillUserFormV8(u);
+};
+window.toggleUserStatusV8 = async function(id){
+  if(!guardAdmin()) return;
+  const u=users.find(x=>x.id===id); if(!u) return;
+  const newStatus=normalizeStatusV8(u.status)==='active'?'inactive':'active';
+  const action=newStatus==='inactive'?'inactivar':'activar';
+  if(!confirm(`¿Desea ${action} el usuario ${u.username||u.name}?`)) return;
+  const r=await sb.from('app_users').update({status:newStatus,updated_at:nowIsoV114()}).eq('id',id);
+  if(r.error) return alert(r.error.message);
+  await loadAll();
+};
+window.resetUserPasswordV8 = async function(id){
+  if(!guardAdmin()) return;
+  const u=users.find(x=>x.id===id); if(!u) return;
+  if(!confirm(`Se asignará la contraseña temporal 123456 a ${u.username||u.name} y deberá cambiarla al ingresar. ¿Continuar?`)) return;
+  const tempHash=await sha256V114('123456');
+  const r=await sb.from('app_users').update({password_hash:tempHash,must_change_password:true,failed_login_attempts:0,locked_until:null,updated_at:nowIsoV114()}).eq('id',id);
+  if(r.error) return alert(r.error.message);
+  alert('Contraseña temporal asignada: 123456');
+  await loadAll();
+};
+function userMatchesFilterV8(u){
+  const q=($('#userSearch')?.value||'').toLowerCase().trim();
+  if(!q) return true;
+  return [u.username,u.name,u.email,u.role,u.status].join(' ').toLowerCase().includes(q);
+}
+renderUsers = function(){
+  const table=$('#usersTable'); if(!table) return;
+  const rows=(users||[]).filter(userMatchesFilterV8);
+  table.className='users-table';
+  table.innerHTML='<tr><th>Cuenta</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Permisos</th><th>Intentos</th><th>Último ingreso</th><th>Acciones</th></tr>'+rows.map(u=>{
+    const status=normalizeStatusV8(u.status);
+    const perms=normalizePermissionsV8(u);
+    const allowed=PERMISSION_CATALOG_V8.filter(([k])=>perms[k]).map(([,label])=>label);
+    const chips=allowed.slice(0,5).map(x=>`<span class="perm-chip">${x}</span>`).join('')+(allowed.length>5?`<span class="perm-chip">+${allowed.length-5}</span>`:'');
+    return `<tr><td><b>${maskAccessUserV9(u.username)}</b><br><small>Acceso protegido</small></td><td>${u.name||''}<br><small>${u.email||''}</small></td><td><span class="tag">${String(u.role||'').toUpperCase()}</span></td><td><span class="status-pill ${status}">${status==='active'?'Activo':'Inactivo'}</span></td><td><div class="perm-chips">${chips||'<span class="perm-chip">Sin permisos</span>'}</div></td><td>${u.failed_login_attempts||0}</td><td>${u.last_login_at?new Date(u.last_login_at).toLocaleString():'-'}</td><td><div class="user-actions"><button class="action-mini" onclick="editUserV8('${u.id}')">Editar</button><button class="action-mini ${status==='active'?'action-danger':'action-warn'}" onclick="toggleUserStatusV8('${u.id}')">${status==='active'?'Inactivar':'Activar'}</button><button class="action-mini" onclick="resetUserPasswordV8('${u.id}')">Reset clave</button></div></td></tr>`;
+  }).join('');
+};
+saveUser = async function(e){
+  e.preventDefault(); if(!guardAdmin()) return;
+  const id=$('#userId')?.value || editingUserIdV8;
+  const name=$('#userName')?.value?.trim();
+  const accessUsername=normalizeUserV114($('#userUsername')?.value || generateAccessUserV9());
+  const email=$('#userEmail')?.value?.trim()||null;
+  const phone=$('#userPhone')?.value?.trim()||null;
+  const role=String($('#userRole')?.value||'CAJERO').toUpperCase();
+  const status=normalizeStatusV8($('#userStatus')?.value);
+  const permissions=readPermissionGridV8();
+  if(!name){ alert('Ingrese el nombre del usuario.'); return; }
+  if(id){
+    const r=await sb.from('app_users').update({name,username:accessUsername,email,phone,role,status,permissions,updated_at:nowIsoV114()}).eq('id',id);
+    if(r.error) return alert(r.error.message);
+    resetUserFormV8();
+    await loadAll();
+    return;
+  }
+  const username=accessUsername;
+  const tempHash=await sha256V114('123456');
+  const r=await sb.from('app_users').insert({name,email,phone,username,password_hash:tempHash,must_change_password:true,failed_login_attempts:0,locked_until:null,status,role,permissions});
+  if(r.error) return alert(r.error.message);
+  alert('Usuario creado. Entregue al usuario su cuenta de acceso y la contraseña temporal 123456.');
+  resetUserFormV8();
+  await loadAll();
+};
+function bindSecurityV8(){
+  if($('#userForm')) $('#userForm').onsubmit=saveUser;
+  if($('#cancelUserEdit')) $('#cancelUserEdit').onclick=resetUserFormV8;
+  if($('#userRole')) $('#userRole').onchange=()=>renderPermissionGridV8(getRoleTemplateV8($('#userRole').value));
+  if($('#applyRoleTemplate')) $('#applyRoleTemplate').onclick=()=>renderPermissionGridV8(getRoleTemplateV8($('#userRole')?.value||'CAJERO'));
+  if($('#userSearch')) $('#userSearch').oninput=renderUsers;
+  renderPermissionGridV8(getRoleTemplateV8($('#userRole')?.value||'CAJERO'));
+}
+const bindV8Base = bind;
+bind = function(){
+  bindV8Base();
+  bindSecurityV8();
+  applyNavigationPermissionsV8();
+};
+setTimeout(()=>{bindSecurityV8(); applyNavigationPermissionsV8();},400);
+
+/* =====================================================
+   V13.1 - Corrección flujo real de contraseña y seguridad UX
+   - Cambio obligatorio dentro del login, sin tocar base manual.
+   - Reset de contraseña con modal interno, clave temporal aleatoria.
+   - Alta de usuario entrega credenciales desde el sistema.
+===================================================== */
+function randomTemporaryPasswordV131(){
+  const upper='ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower='abcdefghijkmnopqrstuvwxyz';
+  const nums='23456789';
+  const sym='@#$%';
+  const all=upper+lower+nums+sym;
+  const pick=s=>s[Math.floor(Math.random()*s.length)];
+  let pass=pick(upper)+pick(lower)+pick(nums)+pick(sym);
+  while(pass.length<10) pass+=pick(all);
+  return pass.split('').sort(()=>Math.random()-0.5).join('');
+}
+function ensureSystemModalV131(){
+  let wrap=document.getElementById('systemModalV131');
+  if(wrap) return wrap;
+  wrap=document.createElement('div');
+  wrap.id='systemModalV131';
+  wrap.className='system-modal-v131 hidden';
+  wrap.innerHTML=`<div class="system-modal-card-v131">
+    <div class="system-modal-head-v131"><h3 id="systemModalTitleV131"></h3><button id="systemModalCloseV131" type="button">×</button></div>
+    <div id="systemModalBodyV131" class="system-modal-body-v131"></div>
+    <div id="systemModalActionsV131" class="system-modal-actions-v131"></div>
+  </div>`;
+  document.body.appendChild(wrap);
+  wrap.querySelector('#systemModalCloseV131').onclick=()=>wrap.classList.add('hidden');
+  return wrap;
+}
+function openSystemModalV131({title='',body='',actions=[]}){
+  const wrap=ensureSystemModalV131();
+  wrap.querySelector('#systemModalTitleV131').textContent=title;
+  wrap.querySelector('#systemModalBodyV131').innerHTML=body;
+  const actionsEl=wrap.querySelector('#systemModalActionsV131');
+  actionsEl.innerHTML='';
+  actions.forEach(a=>{
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.className=a.className||'ghost';
+    btn.textContent=a.text||'Aceptar';
+    btn.onclick=()=>a.onClick?.(wrap);
+    actionsEl.appendChild(btn);
+  });
+  wrap.classList.remove('hidden');
+  return wrap;
+}
+function showCredentialModalV131({title='Credenciales temporales',username='',password=''}){
+  const safeUser=String(username||'');
+  const safePass=String(password||'');
+  const wrap=openSystemModalV131({
+    title,
+    body:`<p class="modal-note-v131">Entregue estos datos únicamente al usuario autorizado. La contraseña temporal debe cambiarse en el primer ingreso.</p>
+      <div class="credential-box-v131"><span>Usuario</span><b>${safeUser}</b></div>
+      <div class="credential-box-v131"><span>Contraseña temporal</span><b id="tempPasswordTextV131">••••••••••</b></div>
+      <div class="modal-inline-actions-v131"><button type="button" id="showTempPasswordV131">Mostrar</button><button type="button" id="copyTempPasswordV131">Copiar contraseña</button></div>`,
+    actions:[{text:'Aceptar',className:'primary',onClick:(m)=>m.classList.add('hidden')}]
+  });
+  const passEl=wrap.querySelector('#tempPasswordTextV131');
+  wrap.querySelector('#showTempPasswordV131').onclick=()=>{
+    const showing=passEl.textContent===safePass;
+    passEl.textContent=showing?'••••••••••':safePass;
+    wrap.querySelector('#showTempPasswordV131').textContent=showing?'Mostrar':'Ocultar';
+  };
+  wrap.querySelector('#copyTempPasswordV131').onclick=async()=>{
+    try{ await navigator.clipboard.writeText(safePass); wrap.querySelector('#copyTempPasswordV131').textContent='Copiada'; }
+    catch(_e){ passEl.textContent=safePass; }
+  };
+}
+async function setTemporaryPasswordV131(user){
+  const tempPass=randomTemporaryPasswordV131();
+  const tempHash=await sha256V114(tempPass);
+  const r=await sb.from('app_users').update({
+    password_hash:tempHash,
+    must_change_password:true,
+    force_password_change:true,
+    failed_login_attempts:0,
+    locked_until:null,
+    status:'active',
+    updated_at:nowIsoV114()
+  }).eq('id',user.id);
+  if(r.error) throw r.error;
+  try{ await auditLoginV114(user,'PASSWORD_RESET','SUCCESS','Contraseña temporal generada por administrador'); }catch(_e){}
+  return tempPass;
+}
+
+// Reemplazo del flujo obligatorio: se muestra dentro del login, no como alerta perdida ni SQL manual.
+showPasswordChangeV114 = function(user){
+  pendingPasswordUserV114=user;
+  passwordChangeModeV114='initial';
+  const card=document.querySelector('.login-card');
+  const loginForm=document.getElementById('loginForm');
+  const note=document.querySelector('.login-security-note');
+  if(loginForm) loginForm.classList.add('hidden');
+  if(note) note.classList.add('hidden');
+  let panel=document.getElementById('forcedPasswordPanelV131');
+  if(!panel){
+    panel=document.createElement('form');
+    panel.id='forcedPasswordPanelV131';
+    panel.className='forced-password-panel-v131';
+    panel.innerHTML=`<div class="forced-head-v131"><h2>Cambio de contraseña requerido</h2><p>Por seguridad, debe crear una nueva contraseña antes de ingresar.</p></div>
+      <label>Nueva contraseña</label>
+      <input id="forcedNewPasswordV131" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" minlength="8" required>
+      <label>Confirmar contraseña</label>
+      <input id="forcedConfirmPasswordV131" type="password" autocomplete="new-password" placeholder="Repita la contraseña" minlength="8" required>
+      <button class="primary wide" type="submit">Actualizar contraseña e ingresar</button>
+      <button class="ghost wide" type="button" id="forcedBackLoginV131">Volver al ingreso</button>
+      <div id="forcedPasswordMessageV131" class="login-message"></div>`;
+    card.appendChild(panel);
+    panel.onsubmit=changeForcedPasswordV131;
+    panel.querySelector('#forcedBackLoginV131').onclick=()=>{
+      pendingPasswordUserV114=null;
+      panel.remove();
+      if(loginForm) loginForm.classList.remove('hidden');
+      if(note) note.classList.remove('hidden');
+      setLoginMessageV114('');
+      document.getElementById('loginPassword')?.focus();
+    };
+  }
+  setLoginMessageV114('');
+  setTimeout(()=>document.getElementById('forcedNewPasswordV131')?.focus(),80);
+};
+async function changeForcedPasswordV131(e){
+  e.preventDefault();
+  const msg=document.getElementById('forcedPasswordMessageV131');
+  const setMsg=(t,ok=false)=>{ if(msg){ msg.textContent=t; msg.style.color=ok?'#86efac':'#fca5a5'; } };
+  const user=pendingPasswordUserV114;
+  if(!user?.id){ setMsg('Sesión temporal no encontrada. Vuelva a iniciar sesión.'); return; }
+  const p1=document.getElementById('forcedNewPasswordV131')?.value||'';
+  const p2=document.getElementById('forcedConfirmPasswordV131')?.value||'';
+  if(p1.length<8){ setMsg('La contraseña debe tener al menos 8 caracteres.'); return; }
+  if(p1!==p2){ setMsg('Las contraseñas no coinciden.'); return; }
+  if(p1==='123456'){ setMsg('Use una contraseña diferente a la temporal.'); return; }
+  const hash=await sha256V114(p1);
+  const updated={...user,password_hash:hash,must_change_password:false,force_password_change:false,last_login_at:nowIsoV114(),failed_login_attempts:0,locked_until:null};
+  try{
+    const r=await sb.from('app_users').update({
+      password_hash:hash,
+      must_change_password:false,
+      force_password_change:false,
+      failed_login_attempts:0,
+      locked_until:null,
+      last_login_at:nowIsoV114(),
+      updated_at:nowIsoV114()
+    }).eq('id',user.id);
+    if(r.error) throw r.error;
+  }catch(err){ console.error(err); setMsg('No se pudo actualizar la contraseña. Revise permisos de Supabase.'); return; }
+  try{ await auditLoginV114(updated,'PASSWORD_CHANGE','SUCCESS','Cambio obligatorio completado desde login'); }catch(_e){}
+  setMsg('Contraseña actualizada. Ingresando...',true);
+  pendingPasswordUserV114=null;
+  setTimeout(()=>applySessionV114(updated),350);
+}
+
+// Reset profesional, sin confirm/alert del navegador y sin contraseña fija 123456.
+window.resetUserPasswordV8 = async function(id){
+  if(!guardAdmin()) return;
+  const u=users.find(x=>x.id===id); if(!u) return;
+  openSystemModalV131({
+    title:'Restablecer contraseña',
+    body:`<p class="modal-note-v131">Se generará una contraseña temporal aleatoria y el usuario deberá cambiarla al iniciar sesión.</p>
+      <div class="credential-box-v131"><span>Usuario</span><b>${u.name||'Usuario del sistema'}</b></div>
+      <div class="warning-box-v131">La contraseña temporal se mostrará una sola vez para entrega segura.</div>`,
+    actions:[
+      {text:'Cancelar',className:'ghost',onClick:(m)=>m.classList.add('hidden')},
+      {text:'Restablecer contraseña',className:'primary',onClick:async(m)=>{
+        try{
+          const temp=await setTemporaryPasswordV131(u);
+          m.classList.add('hidden');
+          await loadAll();
+          showCredentialModalV131({title:'Contraseña restablecida',username:u.username,password:temp});
+        }catch(err){ console.error(err); alert(err.message||'No se pudo restablecer la contraseña.'); }
+      }}
+    ]
+  });
+};
+
+// Alta de usuario con contraseña temporal aleatoria y entrega desde el sistema.
+saveUser = async function(e){
+  e.preventDefault(); if(!guardAdmin()) return;
+  const id=document.getElementById('userId')?.value || editingUserIdV8;
+  const name=document.getElementById('userName')?.value?.trim();
+  const accessUsername=normalizeUserV114(document.getElementById('userUsername')?.value || generateAccessUserV9());
+  const email=document.getElementById('userEmail')?.value?.trim()||null;
+  const phone=document.getElementById('userPhone')?.value?.trim()||null;
+  const role=String(document.getElementById('userRole')?.value||'CAJERO').toUpperCase();
+  const status=normalizeStatusV8(document.getElementById('userStatus')?.value);
+  const permissions=readPermissionGridV8();
+  if(!name){ alert('Ingrese el nombre del usuario.'); return; }
+  if(id){
+    const r=await sb.from('app_users').update({name,username:accessUsername,email,phone,role,status,permissions,updated_at:nowIsoV114()}).eq('id',id);
+    if(r.error) return alert(r.error.message);
+    resetUserFormV8();
+    await loadAll();
+    return;
+  }
+  const tempPass=randomTemporaryPasswordV131();
+  const tempHash=await sha256V114(tempPass);
+  const r=await sb.from('app_users').insert({
+    name,email,phone,username:accessUsername,password_hash:tempHash,
+    must_change_password:true,force_password_change:true,
+    failed_login_attempts:0,locked_until:null,status,role,permissions
+  }).select('id,username,name').maybeSingle();
+  if(r.error) return alert(r.error.message);
+  resetUserFormV8();
+  await loadAll();
+  showCredentialModalV131({title:'Usuario creado',username:accessUsername,password:tempPass});
+};
+
+// Texto correcto del formulario de usuarios.
+try{
+  const oldReset=resetUserFormV8;
+  resetUserFormV8=function(){
+    oldReset();
+    if(document.getElementById('userFormHelp')) document.getElementById('userFormHelp').textContent='Al crear un usuario se genera una contraseña temporal aleatoria y cambio obligatorio. El acceso no se publica en la pantalla de login.';
+  };
+}catch(_e){}
+
+
+/* =====================================================
+   V13.2 - Autenticación sin SQL manual
+   Causa corregida: RLS bloqueaba updates directos a app_users.
+   Solución: RPC SECURITY DEFINER + mensajes de usuario limpios.
+===================================================== */
+function getCurrentActorIdV132(){
+  try{
+    const raw=localStorage.getItem('mm_session_user');
+    const u=raw?JSON.parse(raw):null;
+    return u?.id || currentUserV114?.id || null;
+  }catch(_e){ return currentUserV114?.id || null; }
+}
+function friendlySecurityErrorV132(err){
+  console.error('Detalle técnico de seguridad:', err);
+  const msg=String(err?.message||err?.details||'');
+  if(msg.includes('function') || msg.includes('does not exist')) return 'Falta ejecutar la actualización de seguridad del sistema.';
+  if(msg.includes('permission') || msg.includes('RLS') || msg.includes('policy')) return 'No fue posible guardar el cambio por una política de seguridad. Avise al administrador.';
+  return 'No fue posible completar la operación. Intente nuevamente o contacte al administrador.';
+}
+async function rpcChangePasswordV132({username,currentHash,newHash}){
+  const r=await sb.rpc('mm_auth_change_password', {
+    p_username: username,
+    p_current_hash: currentHash,
+    p_new_hash: newHash
+  });
+  if(r.error) throw r.error;
+  const data=r.data || {};
+  if(data.ok === false) throw new Error(data.message || 'No fue posible actualizar la contraseña.');
+  return data.user || data;
+}
+
+// Reemplazo final del cambio obligatorio desde login.
+changeForcedPasswordV131 = async function(e){
+  e.preventDefault();
+  const msg=document.getElementById('forcedPasswordMessageV131');
+  const setMsg=(t,ok=false)=>{ if(msg){ msg.textContent=t; msg.style.color=ok?'#86efac':'#fca5a5'; } };
+  const user=pendingPasswordUserV114;
+  if(!user?.username){ setMsg('Sesión temporal no encontrada. Vuelva al ingreso e intente nuevamente.'); return; }
+  const p1=document.getElementById('forcedNewPasswordV131')?.value||'';
+  const p2=document.getElementById('forcedConfirmPasswordV131')?.value||'';
+  if(p1.length<8){ setMsg('La contraseña debe tener al menos 8 caracteres.'); return; }
+  if(p1!==p2){ setMsg('Las contraseñas no coinciden.'); return; }
+  if(p1==='123456'){ setMsg('Use una contraseña diferente a la temporal.'); return; }
+  const newHash=await sha256V114(p1);
+  const currentHash=user.__login_hash || user.password_hash;
+  setMsg('Actualizando contraseña...');
+  try{
+    const updated=await rpcChangePasswordV132({username:user.username,currentHash,newHash});
+    setMsg('Contraseña actualizada. Ingresando...',true);
+    pendingPasswordUserV114=null;
+    setTimeout(()=>applySessionV114(updated),350);
+  }catch(err){
+    setMsg(friendlySecurityErrorV132(err));
+  }
+};
+
+// Reemplazo final del cambio voluntario dentro del ERP.
+changeInitialPasswordV114 = async function(e){
+  e.preventDefault();
+  if(!pendingPasswordUserV114){ setPasswordChangeMessageV114('Sesión no encontrada. Vuelva a iniciar sesión.'); return; }
+  let user=pendingPasswordUserV114;
+  const isVoluntary=passwordChangeModeV114==='voluntary';
+  if(!isVoluntary){ return changeForcedPasswordV131(e); }
+  try{ user=await findUserV114(user.username); }
+  catch(_err){ setPasswordChangeMessageV114('No fue posible validar su usuario. Intente nuevamente.'); return; }
+  if(!user){ setPasswordChangeMessageV114('Usuario no encontrado.'); return; }
+  const currentPass=document.getElementById('currentPassword')?.value||'';
+  const currentHash=await sha256V114(currentPass);
+  const p1=document.getElementById('newPassword')?.value||'';
+  const p2=document.getElementById('confirmPassword')?.value||'';
+  if(p1.length<8){ setPasswordChangeMessageV114('La contraseña debe tener al menos 8 caracteres.'); return; }
+  if(p1!==p2){ setPasswordChangeMessageV114('Las contraseñas no coinciden.'); return; }
+  if(p1==='123456'){ setPasswordChangeMessageV114('Use una contraseña diferente a la temporal.'); return; }
+  const newHash=await sha256V114(p1);
+  setPasswordChangeMessageV114('Actualizando contraseña...');
+  try{
+    const updated=await rpcChangePasswordV132({username:user.username,currentHash,newHash});
+    hidePasswordChangeV114();
+    openSystemModalV131({
+      title:'Contraseña actualizada',
+      body:'<p class="modal-note-v131">La contraseña fue actualizada correctamente.</p>',
+      actions:[{text:'Aceptar',className:'primary',onClick:(m)=>m.classList.add('hidden')}]
+    });
+    applySessionV114(updated);
+  }catch(err){
+    setPasswordChangeMessageV114(friendlySecurityErrorV132(err));
+  }
+};
+
+async function adminSaveUserRpcV132(payload){
+  const r=await sb.rpc('mm_admin_save_user', {
+    p_actor_id: getCurrentActorIdV132(),
+    p_user_id: payload.id || null,
+    p_name: payload.name,
+    p_username: payload.username,
+    p_email: payload.email,
+    p_phone: payload.phone,
+    p_role: payload.role,
+    p_status: payload.status,
+    p_permissions: payload.permissions || {},
+    p_temp_hash: payload.tempHash || null,
+    p_force_change: payload.forceChange === true
+  });
+  if(r.error) throw r.error;
+  const data=r.data || {};
+  if(data.ok === false) throw new Error(data.message || 'No fue posible guardar el usuario.');
+  return data.user || data;
+}
+async function adminSetUserStatusRpcV132(userId,status){
+  const r=await sb.rpc('mm_admin_set_user_status', {
+    p_actor_id:getCurrentActorIdV132(),
+    p_user_id:userId,
+    p_status:status
+  });
+  if(r.error) throw r.error;
+  const data=r.data || {};
+  if(data.ok === false) throw new Error(data.message || 'No fue posible cambiar el estado del usuario.');
+  return data;
+}
+async function adminResetPasswordRpcV132(userId,tempHash){
+  const r=await sb.rpc('mm_admin_reset_password', {
+    p_actor_id:getCurrentActorIdV132(),
+    p_user_id:userId,
+    p_temp_hash:tempHash
+  });
+  if(r.error) throw r.error;
+  const data=r.data || {};
+  if(data.ok === false) throw new Error(data.message || 'No fue posible restablecer la contraseña.');
+  return data;
+}
+
+window.toggleUserStatusV8 = async function(id){
+  if(!guardAdmin()) return;
+  const u=users.find(x=>x.id===id); if(!u) return;
+  const newStatus=normalizeStatusV8(u.status)==='active'?'inactive':'active';
+  const action=newStatus==='inactive'?'Inactivar usuario':'Activar usuario';
+  openSystemModalV131({
+    title:action,
+    body:`<p class="modal-note-v131">Se cambiará el estado de <b>${u.name||'Usuario del sistema'}</b>.</p>`,
+    actions:[
+      {text:'Cancelar',className:'ghost',onClick:(m)=>m.classList.add('hidden')},
+      {text:action,className:newStatus==='inactive'?'danger':'primary',onClick:async(m)=>{
+        try{ await adminSetUserStatusRpcV132(id,newStatus); m.classList.add('hidden'); await loadAll(); }
+        catch(err){ openSystemModalV131({title:'No fue posible actualizar',body:`<p class="modal-note-v131">${friendlySecurityErrorV132(err)}</p>`,actions:[{text:'Aceptar',className:'primary',onClick:(x)=>x.classList.add('hidden')}]} ); }
+      }}
+    ]
+  });
+};
+
+window.resetUserPasswordV8 = async function(id){
+  if(!guardAdmin()) return;
+  const u=users.find(x=>x.id===id); if(!u) return;
+  openSystemModalV131({
+    title:'Restablecer contraseña',
+    body:`<p class="modal-note-v131">Se generará una contraseña temporal aleatoria y el usuario deberá cambiarla al iniciar sesión.</p>
+      <div class="credential-box-v131"><span>Usuario</span><b>${u.name||'Usuario del sistema'}</b></div>
+      <div class="warning-box-v131">La contraseña temporal se mostrará una sola vez.</div>`,
+    actions:[
+      {text:'Cancelar',className:'ghost',onClick:(m)=>m.classList.add('hidden')},
+      {text:'Restablecer contraseña',className:'primary',onClick:async(m)=>{
+        try{
+          const temp=randomTemporaryPasswordV131();
+          const tempHash=await sha256V114(temp);
+          await adminResetPasswordRpcV132(id,tempHash);
+          m.classList.add('hidden');
+          await loadAll();
+          showCredentialModalV131({title:'Contraseña restablecida',username:u.username,password:temp});
+        }catch(err){ openSystemModalV131({title:'No fue posible restablecer',body:`<p class="modal-note-v131">${friendlySecurityErrorV132(err)}</p>`,actions:[{text:'Aceptar',className:'primary',onClick:(x)=>x.classList.add('hidden')}]} ); }
+      }}
+    ]
+  });
+};
+
+saveUser = async function(e){
+  e.preventDefault(); if(!guardAdmin()) return;
+  const id=document.getElementById('userId')?.value || editingUserIdV8;
+  const name=document.getElementById('userName')?.value?.trim();
+  const accessUsername=normalizeUserV114(document.getElementById('userUsername')?.value || generateAccessUserV9());
+  const email=document.getElementById('userEmail')?.value?.trim()||null;
+  const phone=document.getElementById('userPhone')?.value?.trim()||null;
+  const role=String(document.getElementById('userRole')?.value||'CAJERO').toUpperCase();
+  const status=normalizeStatusV8(document.getElementById('userStatus')?.value);
+  const permissions=readPermissionGridV8();
+  if(!name){ openSystemModalV131({title:'Dato requerido',body:'<p class="modal-note-v131">Ingrese el nombre del usuario.</p>',actions:[{text:'Aceptar',className:'primary',onClick:(m)=>m.classList.add('hidden')} ]}); return; }
+  try{
+    if(id){
+      await adminSaveUserRpcV132({id,name,username:accessUsername,email,phone,role,status,permissions});
+      resetUserFormV8(); await loadAll();
+      openSystemModalV131({title:'Usuario actualizado',body:'<p class="modal-note-v131">Los cambios fueron guardados correctamente.</p>',actions:[{text:'Aceptar',className:'primary',onClick:(m)=>m.classList.add('hidden')} ]});
+      return;
+    }
+    const tempPass=randomTemporaryPasswordV131();
+    const tempHash=await sha256V114(tempPass);
+    await adminSaveUserRpcV132({name,username:accessUsername,email,phone,role,status,permissions,tempHash,forceChange:true});
+    resetUserFormV8(); await loadAll();
+    showCredentialModalV131({title:'Usuario creado',username:accessUsername,password:tempPass});
+  }catch(err){
+    openSystemModalV131({title:'No fue posible guardar',body:`<p class="modal-note-v131">${friendlySecurityErrorV132(err)}</p>`,actions:[{text:'Aceptar',className:'primary',onClick:(m)=>m.classList.add('hidden')} ]});
+  }
+};
+
+setTimeout(()=>{
+  const form=document.getElementById('passwordChangeForm');
+  if(form) form.onsubmit=changeInitialPasswordV114;
+  const userForm=document.getElementById('userForm');
+  if(userForm) userForm.onsubmit=saveUser;
+},900);
