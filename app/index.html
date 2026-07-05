@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MM Comercial ERP V11.4 Release Candidate</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="auth-locked">
+  <div id="loginPortal" class="login-portal">
+    <div class="login-card">
+      <div class="login-brand">
+        <img src="assets/logo-mm-ferreteria.png" alt="MM Comercial">
+        <div>
+          <h1>MM Comercial ERP</h1>
+          <p>Portal empresarial de ingreso</p>
+        </div>
+      </div>
+      <form id="loginForm" class="login-form">
+        <label>Usuario</label>
+        <input id="loginUsername" autocomplete="username" placeholder="jurguen.marin" required>
+        <label>Contraseña</label>
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Contraseña" required>
+        <button class="primary wide" type="submit">Ingresar al sistema</button>
+        <div id="loginMessage" class="login-message"></div>
+      </form>
+      <div class="login-security-note">
+        Acceso restringido. Use su usuario asignado por administración.
+      </div>
+    </div>
+  </div>
+
+
+
+  <div id="passwordChangeModal" class="password-modal hidden">
+    <div class="password-card">
+      <div class="password-head">
+        <h2>Cambio de contraseña requerido</h2>
+        <p>Por seguridad, debe crear una nueva contraseña antes de ingresar al sistema.</p>
+      </div>
+      <form id="passwordChangeForm" class="login-form">
+        <label>Nueva contraseña</label>
+        <input id="newPassword" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" minlength="6" required>
+        <label>Confirmar contraseña</label>
+        <input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Repita la contraseña" minlength="6" required>
+        <button class="primary wide" type="submit">Guardar contraseña e ingresar</button>
+        <div id="passwordChangeMessage" class="login-message"></div>
+      </form>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="assets/logo-mm-ferreteria.png" alt="MM Ferretería">
+      <div><b>MM Comercial</b><span>V11.4 RC</span></div>
+    </div>
+    <nav>
+      <button class="active" data-view="dashboard">Dashboard</button>
+      <button data-view="pos">POS Pro</button>
+      <button data-view="clients">Clientes CRM</button>
+      <button data-view="products">Inventario</button>
+      <button data-view="barcode">Códigos / Etiquetas</button>
+      <button data-view="cash">Cajas y Cierres</button>
+      <button data-view="exchange">Mesa de Cambio</button>
+      <button data-view="users">Usuarios</button>
+      <button data-view="promos">Promociones</button>
+      <button data-view="profitability">Rentabilidad</button>
+      <button data-view="sales">Ventas</button>
+      <button data-view="settings">Configuración</button>
+    </nav>
+    <div class="connection"><span id="statusDot"></span><span id="status">Conectando...</span></div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div><h1 id="title">Dashboard</h1><p id="subtitle">ERP comercial multiunidad para ferretería, librería, ventas, caja e inventario separado por línea de negocio.</p></div>
+      <div class="topActions">
+        <select id="roleSelect"><option value="ADMIN">Administrador</option><option value="SUPERVISOR">Supervisor</option><option value="CAJERO">Cajero</option><option value="BODEGA">Bodega</option></select>
+        <select id="activeCashBox"><option value="">Sin caja</option></select>
+        <span id="currentUserBadge" class="user-badge">Sin sesión</span><button id="logoutBtn" class="ghost">Salir</button><button id="refreshBtn">Actualizar</button>
+      </div>
+    </header>
+
+    <section id="dashboard" class="view show">
+      <div class="kpis">
+        <article><small>Ventas hoy</small><b id="kpiToday">C$ 0</b><span>Facturación diaria</span></article>
+        <article><small>Utilidad estimada</small><b id="kpiProfitToday">C$ 0</b><span>Según costo histórico</span></article>
+        <article><small>Clientes registrados</small><b id="kpiClients">0</b><span>Base comercial</span></article>
+        <article><small>Cajas abiertas</small><b id="kpiOpenCash">0</b><span>Operación activa</span></article>
+        <article><small>Stock bajo</small><b id="kpiLowStock">0</b><span>Requiere compra</span></article>
+      </div>
+      <div id="businessDashboardV112" class="business-dashboard-v112"></div>
+      <div class="grid2">
+        <div class="panel"><h3>Top productos con mayor ganancia</h3><table id="dashTopProfit"></table></div>
+        <div class="panel"><h3>Productos con menor margen</h3><table id="dashLowProfit"></table></div>
+        <div class="panel"><h3>Clientes frecuentes</h3><table id="dashTopClients"></table></div>
+        <div class="panel"><h3>Promociones sugeridas</h3><div id="promoSuggestions" class="promoList"></div></div>
+      </div>
+    </section>
+
+    <section id="pos" class="view">
+      <div class="posLayout">
+        <div class="posCatalog panel glass">
+          <label>Escanear o buscar producto</label>
+          <input id="posSearch" class="bigSearch" placeholder="Código, barras o nombre del producto">
+          <div id="categoryTabs" class="tabs"></div>
+          <div id="posResults" class="productGrid"></div>
+        </div>
+        <div class="salePanel panel">
+          <h2>Venta actual</h2>
+          <div class="formRow"><input id="customerSearch" placeholder="Cliente registrado o eventual"><button id="newClientQuick">+</button></div>
+          <div id="selectedCustomer" class="customerChip">Cliente eventual</div>
+          <div id="cartItems" class="cartItems empty">Carrito vacío</div>
+          <div class="totals">
+            <div><span>Subtotal</span><b id="cartSubtotal">C$ 0</b></div>
+            <div><span>Descuento</span><input id="saleDiscount" type="number" value="0"></div>
+            <div class="grand"><span>Total</span><b id="cartTotal">C$ 0</b></div>
+          </div>
+          <div class="paymentBox">
+            <select id="paymentMethod"><option>EFECTIVO</option><option>TARJETA</option><option>TRANSFERENCIA</option><option>CRÉDITO</option><option>MIXTO</option></select>
+            <input id="amountReceived" type="number" placeholder="Recibido">
+            <input id="paymentReference" placeholder="Referencia / voucher / últimos 4">
+            <select id="bankAccount" class="hidden"></select>
+            <div class="change">Cambio: <b id="changePreview">C$ 0</b></div>
+          </div>
+          <button id="finishSale" class="primary wide">Finalizar e imprimir</button>
+          <button id="clearCart" class="ghost wide">Cancelar venta</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="clients" class="view">
+      <div class="split">
+        <form id="clientForm" class="panel form"><h3>Cliente</h3><input type="hidden" id="clientId"><input id="clientName" required placeholder="Nombre / Razón social"><input id="clientPhone" placeholder="Teléfono"><input id="clientEmail" placeholder="Correo"><input id="clientAddress" placeholder="Dirección"><select id="clientType"><option>CONSUMIDOR FINAL</option><option>CONSTRUCTOR</option><option>ELECTRICISTA</option><option>PLOMERO</option><option>EMPRESA</option><option>MAESTRO DE OBRA</option></select><button class="primary">Guardar cliente</button></form>
+        <div class="panel"><div class="toolbar"><input id="clientFilter" placeholder="Buscar cliente"><button id="newClientBtn">Nuevo</button></div><table id="clientsTable"></table></div>
+      </div>
+      <div class="panel"><h3>Inteligencia de clientes</h3><table id="clientInsights"></table></div>
+    </section>
+
+    <section id="products" class="view">
+      <div class="inventory-pro-header">
+        <div>
+          <h2>Inventario profesional</h2>
+          <p>Control de productos, stock, márgenes, etiquetas, ubicación y movimientos. Menos adivinanza, más operación.</p>
+        </div>
+        <div class="inventory-actions">
+          <button id="newProductBtn" class="primary adminOnly">Nuevo producto</button>
+          <button id="recalculatePrices" class="ghost adminOnly">Recalcular 35%</button>
+        </div>
+      </div>
+
+      <div class="inventory-kpis" id="inventoryKpisPro"></div>
+
+      <div class="inventory-shortcuts">
+        <button data-inv-filter="ALL" class="active">📦 Productos</button>
+        <button data-inv-filter="LOW">⚠️ Stock bajo</button>
+        <button data-inv-filter="NOMOVE">🕒 Sin movimiento</button>
+        <button data-inv-filter="MARGINLOW">📉 Margen bajo</button>
+        <button data-inv-filter="LABELS">🏷️ Sin etiqueta</button>
+        <button data-view-jump="barcode">🖨️ Centro etiquetas</button>
+      </div>
+
+      <div class="inventory-workspace">
+        <div class="inventory-main-panel panel">
+          <div class="inventory-toolbar-pro">
+            <input id="productSearch" placeholder="Buscar por SKU, código, fabricante, nombre, marca, categoría o ubicación">
+            <select id="inventoryCategoryFilter"><option value="ALL">Todas las categorías</option></select>
+            <select id="inventoryStockFilter"><option value="ALL">Todo el stock</option><option value="LOW">Stock bajo</option><option value="OUT">Agotados</option><option value="OK">Disponible</option></select>
+          </div>
+          <div id="productsTable" class="inventory-pro-list"></div>
+        </div>
+
+        <aside id="inventoryDetailPanel" class="inventory-detail-panel panel">
+          <div class="detail-empty">
+            <div class="detail-icon">📦</div>
+            <h3>Selecciona un producto</h3>
+            <p>Verás su ficha, costo, precio, stock, margen, ubicación, etiqueta y trazabilidad.</p>
+          </div>
+        </aside>
+      </div>
+
+      <form id="productForm" class="panel form hidden product-master-form">
+        <div class="formTitleRow"><div><h3>Maestro de Producto</h3><p>Define cómo se vende, mide, etiqueta y controla este producto.</p></div><span class="version-pill">V10.2</span></div>
+        <input type="hidden" id="productId">
+        <div class="product-form-sections">
+          <section class="product-form-section"><h4>Identificación</h4><div class="formGrid"><select id="productBusinessUnit" required><option value="">Unidad de negocio</option></select><select id="categorySelect"></select><input id="productName" required placeholder="Nombre comercial"><input id="brand" placeholder="Marca"><input id="manufacturerCode" placeholder="Código fabricante"><input id="supplierCode" placeholder="Código proveedor"><input id="productAlias" placeholder="Alias / nombres comunes"></div></section>
+          <section class="product-form-section"><h4>Tipo de venta y unidad</h4><div class="formGrid"><select id="saleType"><option value="UNIDAD">Venta por unidad</option><option value="PESO">Venta por peso</option><option value="LONGITUD">Venta por longitud</option><option value="VOLUMEN">Venta por volumen</option><option value="PAQUETE">Caja / paquete</option><option value="KIT">Kit / juego</option></select><select id="unitType"></select><div class="unit-helper" id="unitHelper">UND no permite decimales.</div></div></section>
+          <section class="product-form-section"><h4>Precio e inventario</h4><div class="formGrid"><input id="purchasePrice" type="number" step="0.01" placeholder="Costo"><select id="profitMargin"><option value="35">Margen 35%</option><option value="40">Margen 40%</option><option value="50">Margen 50%</option><option value="manual">Precio manual</option></select><input id="salePrice" type="number" placeholder="Precio venta"><input id="stock" type="number" step="0.01" placeholder="Stock"><input id="minStock" type="number" step="0.01" placeholder="Stock mínimo"><input id="maxStock" type="number" step="0.01" placeholder="Stock máximo"><input id="location" placeholder="Ubicación / pasillo / estante"></div></section>
+        </div>
+        <div class="formActions"><button class="primary">Guardar producto</button><button type="button" id="cancelProduct" class="ghost">Cancelar</button></div>
+      </form>
+    </section>
+
+    <section id="barcode" class="view">
+      <div class="panel label-center-card">
+        <div class="label-tabs">
+          <button class="active" data-label-tab="inventory">Inventario</button>
+          <button data-label-tab="generator">Generador de etiquetas</button>
+          <button data-label-tab="config">Configuración de impresión</button>
+        </div>
+
+        <div class="label-center-layout">
+          <div class="label-products-panel">
+            <div id="labelTabInventory" class="label-tab-panel show">
+              <div class="section-header compact">
+                <div>
+                  <h3>Inventario - Productos</h3>
+                  <p>Selecciona un producto para ver, imprimir o reimprimir su etiqueta.</p>
+                </div>
+              </div>
+
+              <div class="label-search-row">
+                <input id="barcodeSearch" placeholder="Buscar por SKU, código barras, código fabricante, nombre, marca o alias...">
+                <button id="labelSearchBtn" class="ghost label-icon-btn" title="Buscar">🔍</button>
+              </div>
+
+              <div class="label-filter-grid">
+                <label>Categoría<select id="labelCategoryFilter"><option value="ALL">Todas</option></select></label>
+                <label>Marca<select id="labelBrandFilter"><option value="ALL">Todas</option></select></label>
+                <label>Etiqueta<select id="labelPrintedFilter"><option value="ALL">Todas</option><option value="PRINTED">Con etiqueta impresa</option><option value="NOT_PRINTED">Sin etiqueta impresa</option></select></label>
+                <button id="labelClearFilters" class="ghost">Limpiar</button>
+              </div>
+
+              <div class="label-table-wrap">
+                <table id="labelProductsTable" class="label-products-table"></table>
+              </div>
+              <div id="labelPagination" class="label-pagination"></div>
+              <div class="label-legend"><span><i class="dot printed"></i>Etiqueta impresa</span><span><i class="dot pending"></i>Sin etiqueta impresa</span></div>
+            </div>
+
+            <div id="labelTabGenerator" class="label-tab-panel hidden">
+              <div class="section-header compact">
+                <div>
+                  <h3>Generador de etiquetas</h3>
+                  <p>Usa el producto seleccionado del inventario o busca uno nuevo para generar su etiqueta.</p>
+                </div>
+              </div>
+              <div class="generator-card">
+                <h4>Producto seleccionado</h4>
+                <div id="labelGeneratorSelected" class="selected-product-card">Selecciona un producto desde Inventario.</div>
+                <div class="generator-actions">
+                  <button type="button" id="labelGoInventory" class="ghost">Buscar en inventario</button>
+                  <button type="button" id="labelPrintFromGenerator" class="primary">Imprimir etiqueta</button>
+                </div>
+              </div>
+              <div class="generator-card">
+                <h4>Configuración rápida</h4>
+                <p class="muted">La cantidad, formato, impresora y opciones de precio se ajustan en el panel derecho. El sistema imprimirá la vista previa actual, no una etiqueta imaginaria. Gracias, universo.</p>
+              </div>
+            </div>
+
+            <div id="labelTabConfig" class="label-tab-panel hidden">
+              <div class="section-header compact">
+                <div>
+                  <h3>Configuración de impresión</h3>
+                  <p>Define cómo saldrán las etiquetas antes de imprimir.</p>
+                </div>
+              </div>
+              <div class="config-grid-labels">
+                <div class="config-card">
+                  <h4>Formato recomendado</h4>
+                  <p><strong>50x30mm</strong> para productos pequeños y precios visibles.</p>
+                  <p><strong>70x40mm</strong> para góndola o estante.</p>
+                  <p><strong>Carta/A4</strong> para imprimir varias etiquetas en hoja.</p>
+                </div>
+                <div class="config-card">
+                  <h4>Impresora</h4>
+                  <p>Selecciona la impresora en el panel derecho. Para térmica usa tamaño real y sin márgenes cuando el navegador lo permita.</p>
+                </div>
+                <div class="config-card">
+                  <h4>Prueba</h4>
+                  <p>Imprime una etiqueta del producto seleccionado para validar tamaño, contraste y lectura del código.</p>
+                  <button type="button" id="labelTestPrint" class="primary small">Imprimir prueba</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside class="label-preview-panel">
+            <h3>Vista previa de etiqueta</h3>
+            <div id="labelPreview" class="labelPreview label-preview-area label-preview-single"></div>
+
+            <label class="label-side-field">Formato
+              <select id="labelFormat">
+                <option value="thermal_50x30">Térmica Individual 50x30mm</option>
+                <option value="shelf_70x40">Estante/Góndola 70x40mm</option>
+                <option value="sheet_a4">Hoja Carta/A4 para código de barras</option>
+              </select>
+            </label>
+
+            <label class="label-side-field">Cantidad de etiquetas
+              <div class="label-qty-stepper">
+                <button type="button" id="labelQtyMinus">−</button>
+                <input id="labelQty" type="number" value="1" min="1">
+                <button type="button" id="labelQtyPlus">+</button>
+              </div>
+            </label>
+
+            <label class="label-side-field">Impresora
+              <select id="labelPrinter">
+                <option>POS-58 / USB</option>
+                <option>Epson 80mm</option>
+                <option>Zebra / Térmica</option>
+                <option>Navegador - Imprimir</option>
+              </select>
+            </label>
+
+            <label class="check-row"><input id="labelShowPrice" type="checkbox" checked> Mostrar precio</label>
+            <label class="check-row"><input id="labelShowManufacturer" type="checkbox"> Mostrar código fabricante</label>
+
+            <button id="printLabels" class="primary wide">Imprimir etiqueta seleccionada</button>
+            <button id="printSelectedLabels" class="ghost wide">Imprimir múltiples etiquetas</button>
+            <button id="exportLabelList" class="ghost wide">Exportar lista</button>
+
+            <div id="labelProductInfo" class="label-product-info"></div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section id="cash" class="view">
+      <div class="grid2 cash-grid">
+        <div class="panel cash-card cash-admin-only" id="cashOpeningPanel">
+          <div class="section-header">
+            <div>
+              <h3>Apertura de caja</h3>
+              <p>Selecciona una caja física y confirma el fondo inicial. El cajero se toma del usuario activo.</p>
+            </div>
+            <span class="status-pill status-closed" id="cashOpenStatus">Sin caja abierta</span>
+          </div>
+          <div class="cash-form-grid">
+            <label>Caja<select id="cashBoxName" class="form-control"><option value="">Seleccionar caja</option></select></label>
+            <label>Cajero<input id="cashierName" class="form-control locked" readonly placeholder="Usuario en sesión"></label>
+            <label>Fondo inicial C$<input id="openingAmount" class="form-control" type="number" min="0" step="1" placeholder="C$ 0"></label>
+            <label>Fondo inicial US$<input id="openingAmountUsd" class="form-control" type="number" min="0" step="0.01" placeholder="US$ 0.00"></label>
+          </div>
+          <button id="openCashBtn" class="primary btn-green">Abrir caja</button>
+        </div>
+        <div class="panel cash-card">
+          <div class="section-header">
+            <div>
+              <h3>Cierre de caja</h3>
+              <p>Arqueo por método de pago, salidas de caja y diferencia automática.</p>
+            </div>
+          </div>
+          <label class="single-label">Caja abierta<select id="closeCashSession" class="form-control"></select></label>
+          <div id="closingSessionDetail" class="closing-session-detail">
+            <div class="closing-detail-empty">Selecciona una caja abierta para ver apertura, caja chica y detalle de ventas.</div>
+          </div>
+          <div class="cash-form-grid">
+            <label>Efectivo contado C$<div class="input-action"><input id="countedCash" class="form-control" type="number" readonly placeholder="C$ 0"><button type="button" onclick="openCashBreakdown()">Desglose</button></div></label>
+            <label>Efectivo contado US$<input id="countedCashUsd" class="form-control" type="number" min="0" step="0.01" placeholder="US$ 0.00"></label>
+            <label>Tarjeta contado<input id="countedCard" class="form-control" type="number" min="0" step="1" placeholder="C$ 0"></label>
+            <label>Transferencia contado<input id="countedTransfer" class="form-control" type="number" min="0" step="1" placeholder="C$ 0"></label>
+            <label>Salidas / gastos de caja<input id="cashExpenses" class="form-control" type="number" min="0" step="1" placeholder="C$ 0"></label>
+            <label class="full-span">Observación<textarea id="closingNote" class="form-control" placeholder="Motivo de diferencia, gasto menor, traslado, etc."></textarea></label>
+          </div>
+          <div id="closingCashSummary" class="closing-cash-summary">
+            <div class="closing-summary-title">Cuadre automático</div>
+            <div class="closing-summary-grid">
+              <div><span>Vendido</span><strong>C$ 0</strong></div>
+              <div><span>Esperado C$</span><strong>C$ 0</strong></div>
+              <div><span>Contado C$</span><strong>C$ 0</strong></div>
+              <div><span>Diferencia</span><strong>Cuadrado</strong></div>
+            </div>
+          </div>
+          <button id="closeCashBtn" class="primary btn-green">Cerrar caja</button>
+        </div>
+      </div>
+      <div class="panel cash-card full-width">
+        <div class="section-header"><div><h3>Cajas abiertas y cierres</h3><p>Historial operativo de apertura, cierre, duración y diferencias.</p></div></div>
+        <div id="cashOperationalBanner" class="cash-operational-banner">Sin caja abierta seleccionada</div>
+        <div class="cash-filters">
+          <label>Fecha
+            <input id="cashFilterDate" class="form-control" type="date">
+          </label>
+          <label>Caja
+            <select id="cashFilterBox" class="form-control"><option value="ALL">Todas</option></select>
+          </label>
+          <label>Estado
+            <select id="cashFilterStatus" class="form-control"><option value="ALL">Todas</option><option value="OPEN">Abiertas</option><option value="CLOSED">Cerradas</option></select>
+          </label>
+          <button type="button" id="cashClearFilters" class="ghost">Limpiar</button>
+        </div>
+        <table id="cashTable"></table>
+      </div>
+    </section>
+
+
+    <section id="exchange" class="view">
+      <div class="exchange-header panel">
+        <div>
+          <h2>Mesa de Cambio</h2>
+          <p>Compra y venta de dólares integrada al arqueo de caja. Entra una moneda, sale la otra. El descuadre, esa criatura folklórica, queda acorralado.</p>
+        </div>
+        <div class="exchange-summary-cards" id="exchangeSummaryCards"></div>
+      </div>
+
+      <div class="grid2 exchange-grid">
+        <form id="exchangeForm" class="panel form exchange-form exchange-form-v112">
+          <h3>Nueva operación</h3>
+          <div class="exchange-rate-strip-v112">
+            <div><small>BAC compra</small><b id="exchangeBacBuyView">36.30</b></div>
+            <div><small>BAC venta</small><b id="exchangeBacSellView">37.14</b></div>
+            <div><small>MM compra al público</small><b id="exchangeMmBuyView">36.20</b></div>
+            <div><small>MM venta al público</small><b id="exchangeMmSellView">37.25</b></div>
+          </div>
+          <div class="formGrid">
+            <label>Caja abierta
+              <select id="exchangeCashSession" class="form-control" required></select>
+            </label>
+            <label>¿Qué desea hacer el cliente?
+              <select id="exchangeType" class="form-control" required>
+                <option value="SELL_USD">Cliente compra dólares</option>
+                <option value="BUY_USD">Cliente vende dólares</option>
+              </select>
+            </label>
+            <label id="exchangeUsdLabel">Dólares que desea el cliente
+              <input id="exchangeUsdAmount" class="form-control" type="number" min="0.01" step="0.01" placeholder="US$ 0.00" required>
+            </label>
+            <label>Tasa del día
+              <input id="exchangeRate" class="form-control locked" type="number" min="1" step="0.0001" readonly>
+            </label>
+            <label>Referencia BAC
+              <input id="exchangeReferenceRate" class="form-control locked" type="number" min="1" step="0.0001" readonly>
+            </label>
+            <label>Total C$
+              <input id="exchangeNioAmount" class="form-control locked" readonly placeholder="C$ 0">
+            </label>
+            <label>Tipo de documento
+              <select id="exchangeDocumentType" class="form-control">
+                <option value="CEDULA">Cédula</option>
+                <option value="PASAPORTE">Pasaporte</option>
+                <option value="RESIDENCIA">Residencia</option>
+              </select>
+            </label>
+            <label>Número de documento
+              <input id="exchangeDocumentNumber" class="form-control" placeholder="000-000000-0000A">
+            </label>
+            <label>Nombre completo
+              <input id="exchangeCustomerName" class="form-control" placeholder="Nombre Completo">
+            </label>
+            <label>Celular
+              <input id="exchangeCustomerPhone" class="form-control" placeholder="0000-0000">
+            </label>
+            <label class="full-span">Observación
+              <textarea id="exchangeNotes" class="form-control" placeholder="Detalle de la operación"></textarea>
+            </label>
+          </div>
+          <div class="exchange-operation-preview" id="exchangePreviewBox"></div>
+          <button class="primary btn-green wide">Registrar operación</button>
+        </form>
+
+        <div class="panel exchange-help-card">
+          <h3>Impacto en caja</h3>
+          <div class="exchange-rule sell"><b>Venta de USD</b><span>Entra C$ y sale US$.</span></div>
+          <div class="exchange-rule buy"><b>Compra de USD</b><span>Entra US$ y sale C$.</span></div>
+          <p class="muted">El cierre de caja ya suma estas operaciones al esperado C$ y US$. Por fin una mesa de cambio que no vive aparte como si fuera república independiente.</p>
+        </div>
+      </div>
+
+      <div class="panel full-width">
+        <div class="section-header"><div><h3>Historial de operaciones</h3><p>Movimientos de divisas por caja, tipo, tasa y utilidad estimada.</p></div></div>
+        <table id="exchangeTable" class="exchange-table"></table>
+      </div>
+    </section>
+
+    <section id="users" class="view">
+      <div class="split"><form id="userForm" class="panel form"><h3>Usuario del sistema</h3><input type="hidden" id="userId"><input id="userName" required placeholder="Nombre"><input id="userEmail" placeholder="Correo"><input id="userPhone" placeholder="Teléfono"><select id="userRole"><option>ADMIN</option><option>SUPERVISOR</option><option>CAJERO</option><option>BODEGA</option></select><select id="userStatus"><option>ACTIVE</option><option>INACTIVE</option></select><button class="primary">Guardar usuario</button></form><div class="panel"><table id="usersTable"></table></div></div>
+    </section>
+
+    <section id="promos" class="view"><div class="panel"><h3>Promociones sugeridas y manuales</h3><div id="promoManager" class="promoList"></div></div></section>
+    <section id="profitability" class="view"><div class="panel"><div class="toolbar"><select id="profitFilter"><option value="top">Mayor ganancia</option><option value="low">Menor ganancia</option><option value="margin-low">Margen bajo</option></select></div><h3 id="profitTitle">Rentabilidad</h3><table id="profitTable"></table></div></section>
+    <section id="sales" class="view"><div class="panel"><h3>Ventas recientes</h3><table id="salesTable"></table></div></section>
+    <section id="settings" class="view"><div class="panel"><h3>Configuración</h3><p>Margen estándar 35%, precios redondeados hacia arriba y cuentas bancarias configurables en <code>config.js</code>.</p></div></section>
+  </main>
+
+
+  <div id="cashBreakdownModal" class="modal hidden">
+    <div class="modalCard cash-breakdown-card">
+      <div class="modal-header"><h3>Desglose de efectivo</h3><button onclick="closeCashBreakdown()">×</button></div>
+      <div id="denominationList" class="denomination-list"></div>
+      <div class="cash-total-box"><span>Total efectivo contado</span><strong id="breakdownTotal">C$ 0</strong></div>
+      <div class="modalActions"><button onclick="closeCashBreakdown()" class="ghost">Cancelar</button><button onclick="applyCashBreakdown()" class="primary btn-green">Aplicar total</button></div>
+    </div>
+  </div>
+  <div id="ticketModal" class="modal hidden"><div class="modalCard"><div id="ticket80"></div><div class="modalActions"><button onclick="printTicket()" class="primary">Imprimir Epson 80mm</button><button onclick="closeTicket()" class="ghost">Cerrar</button></div></div></div>
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
