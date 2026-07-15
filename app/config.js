@@ -1,4 +1,4 @@
-// MM Ferretería V7 Dark Blue ERP - configuración Supabase
+// MM Ferretería V12.10 Dark Blue ERP - configuración Supabase
 window.MM_CONFIG = {
   SUPABASE_URL: 'https://wnrrohdgulpumfkwwhtb.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InducnJvaGRndWxwdW1ma3d3aHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5OTMxMjcsImV4cCI6MjA5NzU2OTEyN30.wKxDJ3OihN3n4f6t8kLNx7ErqUvefDD5zn9mViWQu3w',

@@ -4090,3 +4090,583 @@ setTimeout(()=>{
   const userForm=document.getElementById('userForm');
   if(userForm) userForm.onsubmit=saveUser;
 },900);
+
+/* =========================================================
+   V14 - Reportes financieros, exportación y estados básicos
+   ========================================================= */
+let businessExpensesV14 = [];
+let currentReportV14 = {title:'Reporte', rows:[], columns:[], summary:{}};
+
+function ensureReportsPermissionV14(){
+  try{
+    if(Array.isArray(PERMISSION_CATALOG_V8) && !PERMISSION_CATALOG_V8.some(([k])=>k==='reports')){
+      const idx = PERMISSION_CATALOG_V8.findIndex(([k])=>k==='settings');
+      if(idx>=0) PERMISSION_CATALOG_V8.splice(idx,0,['reports','Reportes']);
+      else PERMISSION_CATALOG_V8.push(['reports','Reportes']);
+    }
+    if(typeof ROLE_PERMISSIONS_V8==='object'){
+      ROLE_PERMISSIONS_V8.ADMIN = {...(ROLE_PERMISSIONS_V8.ADMIN||{}), reports:true};
+      ROLE_PERMISSIONS_V8.SUPERVISOR = {...(ROLE_PERMISSIONS_V8.SUPERVISOR||{}), reports:true};
+      ROLE_PERMISSIONS_V8.CAJERO = {...(ROLE_PERMISSIONS_V8.CAJERO||{}), reports:false};
+      ROLE_PERMISSIONS_V8.BODEGA = {...(ROLE_PERMISSIONS_V8.BODEGA||{}), reports:false};
+      ROLE_PERMISSIONS_V8.CONSULTA = {...(ROLE_PERMISSIONS_V8.CONSULTA||{}), reports:true};
+    }
+  }catch(e){console.warn('No se pudo extender permisos de reportes',e);}
+}
+ensureReportsPermissionV14();
+
+function dateOnlyV14(v){return (v?new Date(v):new Date()).toISOString().slice(0,10)}
+function startOfWeekV14(d){const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;}
+function monthKeyV14(d){const x=new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}`;}
+function weekKeyV14(d){const s=startOfWeekV14(d); return `${s.getFullYear()}-S${String(Math.ceil((((s-new Date(s.getFullYear(),0,1))/86400000)+1)/7)).padStart(2,'0')}`;}
+function parseDateInputV14(id, fallback){const v=$('#'+id)?.value; return v?new Date(v+'T00:00:00'):fallback;}
+function reportRangeV14(){
+  const endDefault=new Date(); endDefault.setHours(23,59,59,999);
+  const startDefault=new Date(); startDefault.setDate(startDefault.getDate()-30); startDefault.setHours(0,0,0,0);
+  const start=parseDateInputV14('reportStart', startDefault);
+  const end=parseDateInputV14('reportEnd', endDefault); end.setHours(23,59,59,999);
+  return {start,end, unit:$('#reportBusinessUnit')?.value||'ALL'};
+}
+function saleUnitV14(s){
+  if(s.business_unit_code) return String(s.business_unit_code).toUpperCase();
+  if(s.business_unit_id) return String(s.business_unit_id).toUpperCase();
+  const item=(saleItems||[]).find(i=>String(i.sale_id)===String(s.id));
+  const p=item ? (products||[]).find(x=>String(x.id)===String(item.product_id)) : null;
+  return String(p?.business_unit_code || p?.business_unit_id || p?.business_unit || 'FER').toUpperCase();
+}
+function productUnitV14(p){return String(p.business_unit_code || p.business_unit_id || p.business_unit || 'FER').toUpperCase();}
+function inUnitV14(code, unit){return unit==='ALL' || String(code||'').toUpperCase()===unit;}
+function salesInRangeV14(start,end,unit='ALL'){
+  return (sales||[]).filter(s=>{
+    const d=new Date(s.created_at||s.sale_date||0);
+    return d>=start && d<=end && inUnitV14(saleUnitV14(s),unit);
+  });
+}
+function expensesInRangeV14(start,end,unit='ALL'){
+  return (businessExpensesV14||[]).filter(e=>{
+    const d=new Date((e.expense_date||e.created_at||todayISO())+'T00:00:00');
+    const u=String(e.business_unit_code||e.business_unit_id||'GENERAL').toUpperCase();
+    return d>=start && d<=end && (unit==='ALL' || u===unit || u==='GENERAL');
+  });
+}
+function inventoryByUnitV14(unit='ALL'){
+  return (products||[]).filter(p=>inUnitV14(productUnitV14(p), unit));
+}
+function setDefaultReportDatesV14(){
+  const s=$('#reportStart'), e=$('#reportEnd'), exp=$('#expenseDate');
+  if(s && !s.value){const d=new Date(); d.setDate(d.getDate()-30); s.value=d.toISOString().slice(0,10);}
+  if(e && !e.value) e.value=todayISO();
+  if(exp && !exp.value) exp.value=todayISO();
+}
+function summarizeReportV14(rows){return rows.reduce((a,r)=>{a.revenue+=Number(r.total||r.ingresos||0); a.profit+=Number(r.profit||r.utilidad_bruta||0); a.expenses+=Number(r.gastos||r.amount||0); return a;},{revenue:0,profit:0,expenses:0});}
+function groupByV14(list, keyFn, mapper){
+  const map=new Map();
+  list.forEach(x=>{
+    const k=keyFn(x); const prev=map.get(k)||{}; map.set(k, mapper(prev,x,k));
+  });
+  return [...map.values()].sort((a,b)=>String(a.periodo||a.fecha||a.mes||a.semana).localeCompare(String(b.periodo||b.fecha||b.mes||b.semana)));
+}
+function buildSalesReportV14(type,start,end,unit){
+  const list=salesInRangeV14(start,end,unit);
+  const keyer = type==='daily_sales' ? (s=>dateOnlyV14(s.created_at)) : type==='weekly_sales' ? (s=>weekKeyV14(s.created_at)) : (s=>monthKeyV14(s.created_at));
+  const label = type==='daily_sales' ? 'fecha' : type==='weekly_sales' ? 'semana' : 'mes';
+  const rows=groupByV14(list,keyer,(p,s,k)=>({
+    [label]:k,
+    facturas:Number(p.facturas||0)+1,
+    total:Number(p.total||0)+Number(s.total||0),
+    utilidad:Number(p.utilidad||0)+Number(s.profit_total||0),
+    efectivo:Number(p.efectivo||0)+(String(s.payment_method||'').includes('EFECTIVO')?Number(s.total||0):0),
+    tarjeta:Number(p.tarjeta||0)+(String(s.payment_method||'').includes('TARJETA')?Number(s.total||0):0),
+    transferencia:Number(p.transferencia||0)+(String(s.payment_method||'').includes('TRANSFER')?Number(s.total||0):0)
+  }));
+  return {title:type==='daily_sales'?'Ventas diarias':type==='weekly_sales'?'Ventas semanales':'Ventas mensuales', columns:[label,'facturas','total','utilidad','efectivo','tarjeta','transferencia'], rows};
+}
+function buildExpensesReportV14(start,end,unit){
+  const rows=expensesInRangeV14(start,end,unit).map(e=>({fecha:e.expense_date||dateOnlyV14(e.created_at), categoria:e.category||'Otros', descripcion:e.description||'', unidad:e.business_unit_code||'GENERAL', monto:Number(e.amount||0)}));
+  return {title:'Informe de gastos', columns:['fecha','categoria','descripcion','unidad','monto'], rows};
+}
+function buildInventoryReportV14(unit){
+  const rows=inventoryByUnitV14(unit).map(p=>({codigo:p.internal_code||p.barcode||'', producto:p.name||'', unidad:productUnitV14(p), stock:Number(p.stock||0), minimo:Number(p.min_stock||0), costo:Number(p.purchase_price||0), precio:Number(p.sale_price||0), valor_costo:Number(p.stock||0)*Number(p.purchase_price||0), margen: Number(p.purchase_price||0)>0?(((Number(p.sale_price||0)-Number(p.purchase_price||0))/Number(p.purchase_price||0))*100).toFixed(2)+'%':'0%'}));
+  return {title:'Informe de inventario', columns:['codigo','producto','unidad','stock','minimo','costo','precio','valor_costo','margen'], rows};
+}
+function buildIncomeStatementV14(start,end,unit){
+  const s=salesInRangeV14(start,end,unit);
+  const e=expensesInRangeV14(start,end,unit);
+  const ingresos=s.reduce((a,x)=>a+Number(x.total||0),0);
+  const utilidadBruta=s.reduce((a,x)=>a+Number(x.profit_total||0),0);
+  const costoVentas=Math.max(0, ingresos-utilidadBruta);
+  const gastos=e.reduce((a,x)=>a+Number(x.amount||0),0);
+  const utilidadNeta=utilidadBruta-gastos;
+  return {title:'Estado de resultados', columns:['concepto','monto'], rows:[
+    {concepto:'Ingresos por ventas', monto:ingresos},
+    {concepto:'Costo estimado de ventas', monto:costoVentas},
+    {concepto:'Utilidad bruta', monto:utilidadBruta},
+    {concepto:'Gastos operativos', monto:gastos},
+    {concepto:'Utilidad neta estimada', monto:utilidadNeta}
+  ]};
+}
+function buildBalanceSheetV14(start,end,unit){
+  const inv=inventoryByUnitV14(unit).reduce((a,p)=>a+Number(p.stock||0)*Number(p.purchase_price||0),0);
+  const s=salesInRangeV14(start,end,unit);
+  const cash=s.filter(x=>String(x.payment_method||'').includes('EFECTIVO')).reduce((a,x)=>a+Number(x.total||0),0);
+  const card=s.filter(x=>String(x.payment_method||'').includes('TARJETA')).reduce((a,x)=>a+Number(x.total||0),0);
+  const transfer=s.filter(x=>String(x.payment_method||'').includes('TRANSFER')).reduce((a,x)=>a+Number(x.total||0),0);
+  const expenses=expensesInRangeV14(start,end,unit).reduce((a,x)=>a+Number(x.amount||0),0);
+  const assets=cash+card+transfer+inv-expenses;
+  return {title:'Balance general básico', columns:['grupo','concepto','monto'], rows:[
+    {grupo:'Activo', concepto:'Efectivo generado en periodo', monto:cash},
+    {grupo:'Activo', concepto:'Ventas por tarjeta por cobrar / conciliación', monto:card},
+    {grupo:'Activo', concepto:'Transferencias por conciliar', monto:transfer},
+    {grupo:'Activo', concepto:'Inventario valorizado al costo', monto:inv},
+    {grupo:'Pasivo', concepto:'Gastos registrados del periodo', monto:expenses},
+    {grupo:'Patrimonio', concepto:'Resultado acumulado estimado', monto:assets}
+  ]};
+}
+function renderReportV14(){
+  setDefaultReportDatesV14();
+  const type=$('#reportType')?.value||'daily_sales';
+  const {start,end,unit}=reportRangeV14();
+  let result;
+  if(['daily_sales','weekly_sales','monthly_sales'].includes(type)) result=buildSalesReportV14(type,start,end,unit);
+  if(type==='expenses') result=buildExpensesReportV14(start,end,unit);
+  if(type==='inventory') result=buildInventoryReportV14(unit);
+  if(type==='income_statement') result=buildIncomeStatementV14(start,end,unit);
+  if(type==='balance_sheet') result=buildBalanceSheetV14(start,end,unit);
+  currentReportV14=result||{title:'Reporte', columns:[], rows:[]};
+  const rows=currentReportV14.rows||[], cols=currentReportV14.columns||[];
+  $('#reportTitle').textContent=currentReportV14.title;
+  $('#reportSubtitle').textContent=`Periodo ${start.toISOString().slice(0,10)} al ${end.toISOString().slice(0,10)} · ${unit==='ALL'?'Todas las unidades':unit}`;
+  $('#reportTable').innerHTML = '<tr>'+cols.map(c=>`<th>${escapeHtmlV14(labelV14(c))}</th>`).join('')+'</tr>' + rows.map(r=>'<tr>'+cols.map(c=>`<td>${formatReportCellV14(c,r[c])}</td>`).join('')+'</tr>').join('');
+  renderReportKpisV14(start,end,unit);
+  renderReportSummaryV14(currentReportV14);
+}
+function labelV14(k){return String(k).replaceAll('_',' ').replace(/\b\w/g,m=>m.toUpperCase())}
+function escapeHtmlV14(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function formatReportCellV14(k,v){
+  if(['total','utilidad','efectivo','tarjeta','transferencia','monto','costo','precio','valor_costo'].includes(k)) return money(v);
+  return escapeHtmlV14(v);
+}
+function renderReportKpisV14(start,end,unit){
+  const s=salesInRangeV14(start,end,unit), e=expensesInRangeV14(start,end,unit), inv=inventoryByUnitV14(unit);
+  const revenue=s.reduce((a,x)=>a+Number(x.total||0),0), profit=s.reduce((a,x)=>a+Number(x.profit_total||0),0), expenses=e.reduce((a,x)=>a+Number(x.amount||0),0), inventory=inv.reduce((a,p)=>a+Number(p.stock||0)*Number(p.purchase_price||0),0);
+  if($('#reportKpiRevenue')) $('#reportKpiRevenue').textContent=money(revenue);
+  if($('#reportKpiProfit')) $('#reportKpiProfit').textContent=money(profit);
+  if($('#reportKpiExpenses')) $('#reportKpiExpenses').textContent=money(expenses);
+  if($('#reportKpiInventory')) $('#reportKpiInventory').textContent=money(inventory);
+}
+function renderReportSummaryV14(report){
+  if(!$('#reportSummary')) return;
+  if(['Estado de resultados','Balance general básico'].includes(report.title)){
+    $('#reportSummary').innerHTML=(report.rows||[]).map(r=>`<div><span>${escapeHtmlV14(r.concepto)}</span><strong>${money(r.monto)}</strong></div>`).join('');
+  }else $('#reportSummary').innerHTML=`<div><span>Registros</span><strong>${(report.rows||[]).length}</strong></div>`;
+}
+async function saveExpenseV14(e){
+  e.preventDefault();
+  const payload={expense_date:$('#expenseDate').value||todayISO(), description:$('#expenseDescription').value.trim(), category:$('#expenseCategory').value, amount:Number($('#expenseAmount').value||0), business_unit_code:$('#expenseUnit').value};
+  if(!payload.description || payload.amount<=0) return notifyV14('Completa la descripción y monto del gasto. Hasta los gastos necesitan identidad.','error');
+  const r=await sb.from('business_expenses').insert(payload).select().single();
+  if(r.error){console.error(r.error); return notifyV14('No se pudo guardar el gasto. Verifica que ejecutaste el SQL de reportes.','error');}
+  businessExpensesV14.unshift(r.data); $('#expenseForm').reset(); setDefaultReportDatesV14(); renderReportV14(); notifyV14('Gasto registrado correctamente.','ok');
+}
+function notifyV14(msg,type='ok'){
+  if(typeof showToastV1043==='function') showToastV1043(msg,type);
+  else alert(msg);
+}
+function csvEscapeV14(v){return `"${String(v??'').replaceAll('"','""')}"`;}
+function exportReportCsvV14(){
+  const {title,columns,rows}=currentReportV14; if(!rows?.length) return notifyV14('No hay datos para exportar.','error');
+  const csv=[columns.map(labelV14).map(csvEscapeV14).join(','),...rows.map(r=>columns.map(c=>csvEscapeV14(r[c])).join(','))].join('\n');
+  downloadBlobV14(csv, `${slugV14(title)}_${todayISO()}.csv`, 'text/csv;charset=utf-8;');
+}
+function exportReportExcelV14(){
+  const {title,columns,rows}=currentReportV14; if(!rows?.length) return notifyV14('No hay datos para exportar.','error');
+  const html=`<html><head><meta charset="utf-8"></head><body><table><tr>${columns.map(c=>`<th>${escapeHtmlV14(labelV14(c))}</th>`).join('')}</tr>${rows.map(r=>`<tr>${columns.map(c=>`<td>${escapeHtmlV14(r[c])}</td>`).join('')}</tr>`).join('')}</table></body></html>`;
+  downloadBlobV14(html, `${slugV14(title)}_${todayISO()}.xls`, 'application/vnd.ms-excel;charset=utf-8;');
+}
+function slugV14(s){return String(s||'reporte').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')}
+function downloadBlobV14(content, filename, type){const blob=new Blob([content],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},300);}
+
+const loadAllV14Base = loadAll;
+loadAll = async function(){
+  await loadAllV14Base();
+  businessExpensesV14 = await safeLoad('business_expenses','*','expense_date');
+  if($('#reports')?.classList.contains('show')) renderReportV14();
+};
+const bindV14Base = bind;
+bind = function(){
+  bindV14Base(); ensureReportsPermissionV14();
+  if($('#generateReportBtn')) $('#generateReportBtn').onclick=renderReportV14;
+  if($('#exportReportCsvBtn')) $('#exportReportCsvBtn').onclick=exportReportCsvV14;
+  if($('#exportReportExcelBtn')) $('#exportReportExcelBtn').onclick=exportReportExcelV14;
+  if($('#expenseForm')) $('#expenseForm').onsubmit=saveExpenseV14;
+  ['reportType','reportStart','reportEnd','reportBusinessUnit'].forEach(id=>{const el=$('#'+id); if(el) el.onchange=renderReportV14;});
+  setDefaultReportDatesV14();
+};
+const showViewV14Base = showView;
+showView = function(id,btn){
+  showViewV14Base(id,btn);
+  if(id==='reports'){ensureReportsPermissionV14(); setDefaultReportDatesV14(); renderReportV14();}
+};
+setTimeout(()=>{try{bind(); ensureReportsPermissionV14(); if($('#reports')?.classList.contains('show')) renderReportV14();}catch(e){console.warn('Init reportes V14',e);}},300);
+
+/* ==========================================================
+   V10.03-PATCH - POS, Configuración comercial, Caja US$, Mesa de Cambio
+   Cambios funcionales solicitados:
+   - Métodos oficiales: EFECTIVO, TARJETA, TRANSFERENCIA BANCARIA, MIXTO.
+   - Descuento configurable por efectivo/transferencia.
+   - Pago mixto con detalle efectivo/tarjeta/transferencia y referencia.
+   - Arqueo compacto con desglose C$ y US$.
+   - Mesa de Cambio compatible con columnas nuevas y alias customer_document.
+   ========================================================== */
+const DEFAULT_COMMERCIAL_POLICY_V1003={cash_discount_percent:7,transfer_discount_percent:0,card_fee_included:true,require_transfer_reference:true};
+function policyV1003(){
+  try{return {...DEFAULT_COMMERCIAL_POLICY_V1003,...JSON.parse(localStorage.getItem('mym_commercial_policy')||'{}')};}
+  catch(_){return {...DEFAULT_COMMERCIAL_POLICY_V1003};}
+}
+function savePolicyV1003(p){localStorage.setItem('mym_commercial_policy',JSON.stringify({...policyV1003(),...p}));}
+function moneyPlainV1003(n){return Math.round(Number(n||0));}
+function paymentMethodV1003(){return ($('#paymentMethod')?.value||'EFECTIVO').toUpperCase();}
+function subtotalV1003(){return cartSubtotal();}
+function splitAmountsV1003(){
+  const method=paymentMethodV1003();
+  const totalBefore=saleTotalBeforeAutoDiscountV1003();
+  const cash=Number($('#payCashAmount')?.value||0);
+  const card=Number($('#payCardAmount')?.value||0);
+  const transfer=Number($('#payTransferAmount')?.value||0);
+  if(method==='EFECTIVO') return {cash:Number($('#amountReceived')?.value||0),card:0,transfer:0};
+  if(method==='TARJETA') return {cash:0,card:totalBefore,transfer:0};
+  if(method==='TRANSFERENCIA BANCARIA' || method==='TRANSFERENCIA') return {cash:0,card:0,transfer:totalBefore};
+  return {cash,card,transfer};
+}
+function autoDiscountV1003(){
+  const p=policyV1003();
+  const method=paymentMethodV1003();
+  const subtotal=subtotalV1003();
+  if(method==='EFECTIVO') return subtotal*(Number(p.cash_discount_percent||0)/100);
+  if(method==='TRANSFERENCIA BANCARIA' || method==='TRANSFERENCIA') return subtotal*(Number(p.transfer_discount_percent||0)/100);
+  if(method==='MIXTO'){
+    const s=splitAmountsV1003();
+    return (s.cash*(Number(p.cash_discount_percent||0)/100))+(s.transfer*(Number(p.transfer_discount_percent||0)/100));
+  }
+  return 0;
+}
+function saleTotalBeforeAutoDiscountV1003(){return Math.max(0,cartSubtotal()-Number($('#saleDiscount')?.value||0));}
+saleDiscount=function(){return Number($('#saleDiscount')?.value||0)+autoDiscountV1003();};
+saleTotal=function(){return Math.max(0,cartSubtotal()-saleDiscount());};
+function paymentBalanceV1003(){
+  const s=splitAmountsV1003();
+  return { ...s, paid:s.cash+s.card+s.transfer, total:saleTotal(), diff:(s.cash+s.card+s.transfer)-saleTotal() };
+}
+function buildPaymentUIV1003(){
+  const box=$('.paymentBox'); if(!box || box.dataset.v1003==='1') return;
+  box.dataset.v1003='1';
+  box.innerHTML=`
+    <label>Forma de pago<select id="paymentMethod">
+      <option value="EFECTIVO">EFECTIVO</option>
+      <option value="TARJETA">TARJETA</option>
+      <option value="TRANSFERENCIA BANCARIA">TRANSFERENCIA BANCARIA</option>
+      <option value="MIXTO">MIXTO</option>
+    </select></label>
+    <div id="singlePaymentBox" class="payment-single-v1003"><input id="amountReceived" type="number" min="0" step="1" placeholder="Recibido"></div>
+    <div id="mixedPaymentBox" class="payment-mixed-v1003 hidden">
+      <label>Efectivo C$<input id="payCashAmount" type="number" min="0" step="1" placeholder="C$ 0"></label>
+      <label>Tarjeta C$<input id="payCardAmount" type="number" min="0" step="1" placeholder="C$ 0"></label>
+      <label>Transferencia C$<input id="payTransferAmount" type="number" min="0" step="1" placeholder="C$ 0"></label>
+    </div>
+    <input id="paymentReference" placeholder="Referencia de transferencia / voucher">
+    <select id="bankAccount" class="hidden"></select>
+    <div class="payment-policy-note" id="paymentPolicyNote">Precio incluye costo de tarjeta. Efectivo aplica descuento configurable.</div>
+    <div class="change">Cambio / Diferencia: <b id="changePreview">C$ 0</b></div>`;
+  ['paymentMethod','amountReceived','payCashAmount','payCardAmount','payTransferAmount','paymentReference','saleDiscount'].forEach(id=>{
+    const el=$('#'+id); if(el){el.oninput=()=>{renderPaymentDetails();renderCart();}; el.onchange=()=>{renderPaymentDetails();renderCart();};}
+  });
+}
+renderPaymentDetails=function(){
+  const m=paymentMethodV1003(); const p=policyV1003();
+  $('#singlePaymentBox')?.classList.toggle('hidden',m==='MIXTO' || m==='TARJETA' || m==='TRANSFERENCIA BANCARIA');
+  $('#mixedPaymentBox')?.classList.toggle('hidden',m!=='MIXTO');
+  $('#bankAccount')?.classList.toggle('hidden',!(m==='TRANSFERENCIA BANCARIA'||m==='MIXTO'));
+  if($('#paymentReference')){
+    $('#paymentReference').placeholder=(m==='TRANSFERENCIA BANCARIA'||m==='MIXTO')?'Referencia de transferencia':'Voucher / referencia opcional';
+  }
+  const note=$('#paymentPolicyNote');
+  if(note) note.textContent=`Descuento efectivo: ${Number(p.cash_discount_percent||0)}% · Transferencia: ${Number(p.transfer_discount_percent||0)}% · Tarjeta: sin descuento`;
+};
+const renderCartBaseV1003=renderCart;
+renderCart=function(){
+  renderCartBaseV1003();
+  const auto=autoDiscountV1003();
+  const total=saleTotal();
+  if($('#cartTotal')) $('#cartTotal').textContent=money(total);
+  const bal=paymentBalanceV1003();
+  if($('#changePreview')){
+    if(paymentMethodV1003()==='MIXTO') $('#changePreview').textContent=money(bal.diff);
+    else $('#changePreview').textContent=money(Math.max(0,Number($('#amountReceived')?.value||0)-total));
+  }
+  let badge=$('#autoDiscountBadgeV1003');
+  if(!badge && document.querySelector('.totals')){
+    badge=document.createElement('div'); badge.id='autoDiscountBadgeV1003'; badge.className='auto-discount-v1003';
+    document.querySelector('.totals').appendChild(badge);
+  }
+  if(badge) badge.innerHTML=`<span>Descuento automático por forma de pago</span><b>${money(auto)}</b>`;
+};
+function validatePaymentV1003(){
+  const method=paymentMethodV1003(), total=saleTotal(), bal=paymentBalanceV1003(), ref=($('#paymentReference')?.value||'').trim(), p=policyV1003();
+  if(method==='EFECTIVO' && Number($('#amountReceived')?.value||0)<total) return 'Monto recibido menor al total.';
+  if((method==='TRANSFERENCIA BANCARIA' || (method==='MIXTO' && bal.transfer>0)) && p.require_transfer_reference && !ref) return 'La transferencia bancaria requiere número de referencia.';
+  if(method==='MIXTO' && Math.abs(bal.diff)>0.009) return `El pago mixto no cuadra. Diferencia: ${money(bal.diff)}.`;
+  return '';
+}
+finishSale=async function(){
+  if(!cart.length) return showToastV1043('Carrito vacío.','warning');
+  const sessionId=$('#activeCashBox')?.value; if(!sessionId) return showToastV1043('Debes abrir o seleccionar caja antes de vender.','warning');
+  const err=validatePaymentV1003(); if(err) return showToastV1043(err,'warning');
+  const method=paymentMethodV1003(), bal=paymentBalanceV1003(), total=saleTotal();
+  const profit=cart.reduce((a,i)=>a+((i.unit_price-i.unit_cost)*Number(i.qty)),0);
+  const basePayload={invoice_no:'MM-'+Date.now(),customer_id:selectedCustomer?.id||null,payment_method:method,subtotal:cartSubtotal(),discount:saleDiscount(),tax:0,total,amount_received:method==='MIXTO'?bal.paid:Number($('#amountReceived')?.value||total),change_amount:method==='EFECTIVO'?Math.max(0,Number($('#amountReceived')?.value||0)-total):0,status:'COMPLETED',invoice_type:'TICKET',payment_reference:$('#paymentReference')?.value||null,cash_session_id:sessionId,profit_total:profit};
+  const extended={...basePayload,payment_cash_amount:bal.cash,payment_card_amount:bal.card,payment_transfer_amount:bal.transfer,auto_discount_amount:autoDiscountV1003(),commercial_policy:policyV1003()};
+  let {data:sale,error:se}=await sb.from('sales').insert(extended).select().single();
+  if(se && String(se.message||'').includes('payment_cash_amount')) ({data:sale,error:se}=await sb.from('sales').insert(basePayload).select().single());
+  if(se) return showToastV1043(se.message,'error');
+  const items=cart.map(i=>({sale_id:sale.id,product_id:i.id,product_code:i.internal_code,product_name:i.name,quantity:i.qty,unit_price:i.unit_price,discount:0,total:Number(i.qty)*i.unit_price,unit_cost:i.unit_cost,profit_amount:(i.unit_price-i.unit_cost)*Number(i.qty),profit_margin:i.unit_cost>0?((i.unit_price-i.unit_cost)/i.unit_cost)*100:0,business_unit_id:i.business_unit_id||productBusinessUnitObjV104(i).id}));
+  const {error:ie}=await sb.from('sale_items').insert(items);
+  if(ie) return showToastV1043(ie.message,'error');
+  for(const i of cart){
+    await sb.from('products').update({stock:Number(i.stock)-Number(i.qty)}).eq('id',i.id);
+    await sb.from('inventory_movements').insert({product_id:i.id,movement_type:'SALIDA',quantity:i.qty,reference:sale.invoice_no,notes:'Venta POS V10.03'});
+  }
+  lastSale={...sale,...extended,items,customer_name:selectedCustomer?.name||'Cliente eventual'};
+  renderTicket(lastSale); $('#ticketModal')?.classList.remove('hidden');
+  cart=[]; selectedCustomer=null; if($('#customerSearch')) $('#customerSearch').value=''; ['amountReceived','saleDiscount','paymentReference','payCashAmount','payCardAmount','payTransferAmount'].forEach(id=>{if($('#'+id)) $('#'+id).value=id==='saleDiscount'?'0':'';});
+  await loadAll();
+};
+if($('#finishSale')) $('#finishSale').onclick=finishSale;
+
+function renderSettingsV1003(){
+  const p=policyV1003(); const view=$('#settings'); if(!view) return;
+  view.innerHTML=`<div class="panel settings-policy-v1003"><h3>Configuración comercial</h3><p>Los precios ya incluyen el costo de tarjeta. El sistema aplica descuento solo cuando la forma de pago lo permita.</p><div class="settings-grid-v1003"><label>Descuento por efectivo %<input id="cfgCashDiscount" type="number" min="0" max="100" step="0.01" value="${Number(p.cash_discount_percent||0)}"></label><label>Descuento por transferencia %<input id="cfgTransferDiscount" type="number" min="0" max="100" step="0.01" value="${Number(p.transfer_discount_percent||0)}"></label><label><input id="cfgCardFeeIncluded" type="checkbox" ${p.card_fee_included?'checked':''}> Precio incluye costo de tarjeta</label><label><input id="cfgRequireTransferRef" type="checkbox" ${p.require_transfer_reference?'checked':''}> Transferencia requiere referencia</label></div><button id="saveCommercialPolicy" class="primary">Guardar política comercial</button></div><div class="panel"><h3>Seguridad</h3><div class="toolbar"><button id="changePasswordBtn" class="primary" type="button">Cambiar mi contraseña</button></div></div>`;
+  $('#saveCommercialPolicy').onclick=()=>{savePolicyV1003({cash_discount_percent:Number($('#cfgCashDiscount').value||0),transfer_discount_percent:Number($('#cfgTransferDiscount').value||0),card_fee_included:$('#cfgCardFeeIncluded').checked,require_transfer_reference:$('#cfgRequireTransferRef').checked}); showToastV1043('Política comercial guardada.','success'); renderCart();};
+  if(typeof bindPasswordButtonV132==='function') bindPasswordButtonV132();
+}
+const showViewBaseV1003=showView;
+showView=function(id,btn){showViewBaseV1003(id,btn); if(id==='settings') renderSettingsV1003(); if(id==='pos'){buildPaymentUIV1003(); renderPaymentDetails(); renderCart();}};
+
+const denominationsNioV1003=[1000,500,200,100,50,20,10,5,1];
+const denominationsUsdV1003=[100,50,20,10,5,1];
+let activeBreakdownCurrencyV1003='NIO';
+window.openCashBreakdown=function(currency='NIO'){
+  activeBreakdownCurrencyV1003=currency;
+  const values=currency==='USD'?denominationsUsdV1003:denominationsNioV1003;
+  const prefix=currency==='USD'?'US$':'C$';
+  const list=$('#denominationList'); if(!list) return;
+  const title=document.querySelector('#cashBreakdownModal .modal-header h3'); if(title) title.textContent=`Desglose de efectivo ${prefix}`;
+  list.innerHTML=values.map(v=>`<div class="denomination-row"><span class="denomination-value">${prefix} ${v}</span><input type="number" min="0" step="1" value="0" data-value="${v}" oninput="calculateBreakdownTotal()"><strong class="denomination-subtotal">${prefix} 0</strong></div>`).join('');
+  $('#cashBreakdownModal')?.classList.remove('hidden'); calculateBreakdownTotal();
+};
+window.calculateBreakdownTotal=function(){
+  let total=0; const prefix=activeBreakdownCurrencyV1003==='USD'?'US$':'C$';
+  document.querySelectorAll('#denominationList input').forEach(input=>{const subtotal=Number(input.dataset.value)*Number(input.value||0); const el=input.closest('.denomination-row')?.querySelector('.denomination-subtotal'); if(el) el.textContent=prefix+' '+subtotal.toLocaleString('es-NI'); total+=subtotal;});
+  if($('#breakdownTotal')) $('#breakdownTotal').textContent=prefix+' '+total.toLocaleString('es-NI');
+};
+window.applyCashBreakdown=function(){
+  const txt=($('#breakdownTotal')?.textContent||'0').replace('C$','').replace('US$','').replaceAll(',','').trim();
+  if(activeBreakdownCurrencyV1003==='USD') $('#countedCashUsd').value=Number(txt||0).toFixed(2); else $('#countedCash').value=Math.ceil(Number(txt||0));
+  updateClosingCashSummaryV84(); closeCashBreakdown();
+};
+function patchCashUsdButtonV1003(){
+  const usd=$('#countedCashUsd'); if(!usd || usd.dataset.v1003==='1') return; usd.dataset.v1003='1';
+  const label=usd.closest('label'); if(label){label.innerHTML='Efectivo contado US$<div class="input-action"><input id="countedCashUsd" class="form-control" type="number" min="0" step="0.01" placeholder="US$ 0.00"><button type="button" onclick="openCashBreakdown(\'USD\')">Desglose</button></div>';}
+  const c=$('#countedCash')?.closest('label')?.querySelector('button'); if(c) c.setAttribute('onclick',"openCashBreakdown('NIO')");
+}
+const renderCashBaseV1003=renderCash;
+renderCash=function(){renderCashBaseV1003(); patchCashUsdButtonV1003();};
+
+const submitExchangeBaseV1003=submitExchangeV111;
+submitExchangeV111=async function(e){
+  e.preventDefault();
+  syncExchangeRatesToFormV112();
+  const sessionId=$('#exchangeCashSession')?.value || $('#activeCashBox')?.value;
+  if(!sessionId) return showToastV1043('Debes abrir o seleccionar una caja antes de operar Mesa de Cambio.','warning');
+  const type=$('#exchangeType')?.value || 'SELL_USD';
+  const usd=Number($('#exchangeUsdAmount')?.value||0); if(usd<=0) return showToastV1043('Ingresa el monto en dólares.','warning');
+  const valid=validateExchangeCustomerV112(); if(!valid.ok) return showToastV1043(valid.msg,'warning');
+  const rate=rateForExchangeTypeV112(type), ref=refRateForExchangeTypeV112(type), nio=Number((usd*rate).toFixed(2));
+  const profit=type==='SELL_USD'?Number((usd*(rate-ref)).toFixed(2)):Number((usd*(ref-rate)).toFixed(2));
+  const common={cash_session_id:sessionId,operation_type:type,currency_from:type==='SELL_USD'?'NIO':'USD',currency_to:type==='SELL_USD'?'USD':'NIO',amount_usd:usd,rate,amount_nio:nio,reference_rate:ref,profit_nio:profit,customer_name:valid.name,reference:`${valid.doc_type}: ${valid.doc}`,notes:$('#exchangeNotes')?.value||null,status:'COMPLETED',created_at:new Date().toISOString()};
+  const extended={...common,customer_document:`${valid.doc_type}: ${valid.doc}`,customer_document_type:valid.doc_type,customer_document_number:valid.doc,customer_phone:valid.phone||null,provider_name:activeExchangeSettingsV112().provider_name,provider_buy_rate:activeExchangeSettingsV112().provider_buy_rate,provider_sell_rate:activeExchangeSettingsV112().provider_sell_rate};
+  let r=await sb.from('exchange_operations').insert(extended).select().single();
+  if(r.error && /customer_document|customer_document_type|provider_/i.test(r.error.message||'')) r=await sb.from('exchange_operations').insert(common).select().single();
+  if(r.error) return showToastV1043('No se pudo registrar Mesa de Cambio: '+r.error.message,'error');
+  showToastV1043('Operación registrada. Ya impacta el arqueo C$ y US$.','success');
+  $('#exchangeForm')?.reset(); exchangeOperationsV111.unshift(r.data||extended); renderExchangeV111(); updateClosingCashSummaryV84(); renderCash(); renderDashboard();
+};
+bindExchangeV111=function(){
+  if($('#exchangeForm')) $('#exchangeForm').onsubmit=submitExchangeV111;
+  ['exchangeType','exchangeUsdAmount','exchangeCashSession'].forEach(id=>{const el=$('#'+id); if(el){el.oninput=exchangePreviewV111; el.onchange=()=>{exchangePreviewV111(); renderExchangeV111();};}});
+  const docType=$('#exchangeDocumentType'); if(docType) docType.onchange=documentPlaceholderV112;
+  const doc=$('#exchangeDocumentNumber'); if(doc) doc.oninput=formatDocumentV112;
+};
+
+(function bootV1003Patch(){
+  setTimeout(()=>{buildPaymentUIV1003(); renderPaymentDetails(); patchCashUsdButtonV1003(); if($('#finishSale')) $('#finishSale').onclick=finishSale; if($('#settings')?.classList.contains('show')) renderSettingsV1003();},500);
+})();
+
+/* ==========================================================
+   V10.03-COMPLETE - Inventario aplicado
+   Corrige la edición del producto para que no muestre números sin contexto.
+   Convierte el modal/formulario en una ficha profesional con labels permanentes.
+   ========================================================== */
+function ensureInventoryFormV1003(){
+  const form=$('#productForm'); if(!form || form.dataset.v1003Inventory==='1') return;
+  form.dataset.v1003Inventory='1';
+  form.classList.add('inventory-editor-v1003');
+  form.innerHTML=`
+    <div class="inventory-editor-head-v1003">
+      <div>
+        <span class="editor-kicker-v1003">Maestro de Producto</span>
+        <h3 id="productEditorTitleV1003">Nuevo producto</h3>
+        <p>Ficha completa de inventario, precio, unidades, códigos y ubicación. Nada de campos mudos con números misteriosos, porque aparentemente los humanos necesitan saber qué están viendo.</p>
+      </div>
+      <div class="editor-status-v1003"><span class="version-pill">V10.03</span><button type="button" id="cancelProductTopV1003" class="ghost">Cerrar</button></div>
+    </div>
+    <input type="hidden" id="productId">
+    <div id="productCodePreviewV1003" class="product-code-preview-v1003 hidden"></div>
+    <div class="product-form-sections-v1003">
+      <section class="product-form-section-v1003 span-2"><h4>Identificación</h4><div class="formGridV1003">
+        <label>Unidad de negocio<select id="productBusinessUnit" required><option value="">Seleccionar unidad</option></select></label>
+        <label>Categoría<select id="categorySelect"></select></label>
+        <label class="wide">Nombre comercial<input id="productName" required placeholder="Ej. Cemento Canal 42.5 kg"></label>
+        <label>Marca<input id="brand" placeholder="Marca"></label>
+        <label>Código fabricante<input id="manufacturerCode" placeholder="Código del fabricante"></label>
+        <label>Código proveedor<input id="supplierCode" placeholder="Código del proveedor"></label>
+        <label class="wide">Alias / nombres comunes<input id="productAlias" placeholder="Cómo lo pide el cliente en mostrador"></label>
+      </div></section>
+      <section class="product-form-section-v1003"><h4>Tipo de venta y unidad</h4><div class="formGridV1003">
+        <label>Tipo de venta<select id="saleType"><option value="UNIDAD">Venta por unidad</option><option value="PESO">Venta por peso</option><option value="LONGITUD">Venta por longitud</option><option value="VOLUMEN">Venta por volumen</option><option value="PAQUETE">Caja / paquete</option><option value="KIT">Kit / juego</option></select></label>
+        <label>Unidad de medida<select id="unitType"></select></label>
+        <div class="unit-helper" id="unitHelper">UND no permite decimales.</div>
+      </div></section>
+      <section class="product-form-section-v1003"><h4>Precio e inventario</h4><div class="formGridV1003">
+        <label>Costo unitario C$<input id="purchasePrice" type="number" step="0.01" placeholder="0.00"></label>
+        <label>Política de margen<select id="profitMargin"><option value="35">Margen 35%</option><option value="40">Margen 40%</option><option value="50">Margen 50%</option><option value="manual">Precio manual</option></select></label>
+        <label>Precio de venta C$<input id="salePrice" type="number" step="0.01" placeholder="0.00"></label>
+        <label>Stock actual<input id="stock" type="number" step="0.01" placeholder="0"></label>
+        <label>Stock mínimo<input id="minStock" type="number" step="0.01" placeholder="0"></label>
+        <label>Stock máximo<input id="maxStock" type="number" step="0.01" placeholder="0"></label>
+        <label class="wide">Ubicación / pasillo / estante<input id="location" placeholder="Ej. Pasillo 2, Estante B"></label>
+      </div></section>
+    </div>
+    <div class="inventory-editor-summary-v1003">
+      <div><small>Costo</small><b id="sumCostV1003">C$ 0</b></div>
+      <div><small>Venta</small><b id="sumSaleV1003">C$ 0</b></div>
+      <div><small>Margen real</small><b id="sumMarginV1003">0%</b></div>
+      <div><small>Stock</small><b id="sumStockV1003">0</b></div>
+    </div>
+    <div class="formActions sticky-actions-v1003"><button class="primary">Guardar producto</button><button type="button" id="cancelProduct" class="ghost">Cancelar</button></div>`;
+  $('#cancelProduct') && ($('#cancelProduct').onclick=resetProductForm);
+  $('#cancelProductTopV1003') && ($('#cancelProductTopV1003').onclick=resetProductForm);
+  $('#purchasePrice') && ($('#purchasePrice').oninput=()=>{calcSalePrice(); updateInventorySummaryV1003();});
+  $('#salePrice') && ($('#salePrice').oninput=updateInventorySummaryV1003);
+  $('#stock') && ($('#stock').oninput=updateInventorySummaryV1003);
+  $('#profitMargin') && ($('#profitMargin').onchange=()=>{calcSalePrice(); updateInventorySummaryV1003();});
+  $('#productForm').onsubmit=saveProduct;
+  if(typeof fillBusinessUnitSelectsV102==='function') fillBusinessUnitSelectsV102();
+  if(typeof fillCategorySelect==='function') fillCategorySelect();
+  if(typeof updateUnitOptionsV102==='function') updateUnitOptionsV102();
+}
+function updateInventorySummaryV1003(){
+  const cost=Number($('#purchasePrice')?.value||0), sale=Number($('#salePrice')?.value||0), stock=Number($('#stock')?.value||0);
+  if($('#sumCostV1003')) $('#sumCostV1003').textContent=money(cost);
+  if($('#sumSaleV1003')) $('#sumSaleV1003').textContent=money(sale);
+  if($('#sumStockV1003')) $('#sumStockV1003').textContent=stock.toLocaleString('es-NI');
+  if($('#sumMarginV1003')) $('#sumMarginV1003').textContent=(cost>0?(((sale-cost)/cost)*100).toFixed(1):'0')+'%';
+}
+const resetProductFormBaseV1003Inventory=resetProductForm;
+resetProductForm=function(){
+  const form=$('#productForm'); if(form){form.reset(); $('#productId') && ($('#productId').value=''); form.classList.add('hidden');}
+};
+const editProductBaseV1003Inventory=window.editProduct;
+window.editProduct=function(id){
+  ensureInventoryFormV1003();
+  if(typeof editProductBaseV1003Inventory==='function') editProductBaseV1003Inventory(id);
+  const p=(products||[]).find(x=>String(x.id)===String(id));
+  if(p){
+    $('#productEditorTitleV1003') && ($('#productEditorTitleV1003').textContent='Editar producto');
+    $('#productCodePreviewV1003') && ($('#productCodePreviewV1003').classList.remove('hidden'));
+    $('#productCodePreviewV1003') && ($('#productCodePreviewV1003').innerHTML=`<div><small>Código interno</small><strong>${escapeHtmlV6(p.internal_code||'SIN-SKU')}</strong></div><div><small>Código de barras</small><strong>${escapeHtmlV6(p.barcode||'Sin código')}</strong></div><div><small>Unidad negocio</small><strong>${escapeHtmlV6(productBusinessUnitObjV104(p).name)}</strong></div>`);
+  }
+  updateInventorySummaryV1003();
+  $('#productForm')?.scrollIntoView({behavior:'smooth',block:'start'});
+};
+function newProductV1003Inventory(){
+  if(!guardAdmin()) return;
+  ensureInventoryFormV1003(); resetProductForm(); ensureInventoryFormV1003();
+  $('#productEditorTitleV1003') && ($('#productEditorTitleV1003').textContent='Nuevo producto');
+  $('#productCodePreviewV1003') && ($('#productCodePreviewV1003').classList.add('hidden'));
+  $('#productForm')?.classList.remove('hidden');
+  if(typeof fillBusinessUnitSelectsV102==='function') fillBusinessUnitSelectsV102();
+  if(typeof fillCategorySelect==='function') fillCategorySelect();
+  if(typeof updateUnitOptionsV102==='function') updateUnitOptionsV102();
+  updateInventorySummaryV1003();
+  $('#productForm')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+const showViewBaseV1003Inventory=showView;
+showView=function(id,btn){
+  showViewBaseV1003Inventory(id,btn);
+  if(id==='products'){
+    ensureInventoryFormV1003();
+    if($('#newProductBtn')) $('#newProductBtn').onclick=newProductV1003Inventory;
+  }
+};
+setTimeout(()=>{try{ensureInventoryFormV1003(); if($('#newProductBtn')) $('#newProductBtn').onclick=newProductV1003Inventory;}catch(e){console.warn('Inventario V10.03',e);}},700);
+
+
+/* =========================================================
+   V10.03 MOBILE READY — navegación y tablas adaptables
+========================================================= */
+(function initMobileReadyV1003(){
+  const body=document.body;
+  const menuBtn=document.getElementById('mobileMenuBtn');
+  const backdrop=document.getElementById('mobileNavBackdrop');
+  const sidebar=document.getElementById('appSidebar') || document.querySelector('.sidebar');
+
+  const closeMobileNav=()=>{
+    body.classList.remove('mobile-nav-open');
+    menuBtn?.setAttribute('aria-expanded','false');
+    backdrop?.setAttribute('aria-hidden','true');
+  };
+  const toggleMobileNav=()=>{
+    const open=!body.classList.contains('mobile-nav-open');
+    body.classList.toggle('mobile-nav-open',open);
+    menuBtn?.setAttribute('aria-expanded',String(open));
+    backdrop?.setAttribute('aria-hidden',String(!open));
+  };
+
+  menuBtn?.addEventListener('click',toggleMobileNav);
+  backdrop?.addEventListener('click',closeMobileNav);
+  sidebar?.querySelectorAll('nav button[data-view]').forEach(btn=>btn.addEventListener('click',closeMobileNav));
+  document.addEventListener('keydown',event=>{if(event.key==='Escape') closeMobileNav();});
+  window.addEventListener('resize',()=>{if(window.innerWidth>1100) closeMobileNav();});
+
+  function wrapWideTables(root=document){
+    root.querySelectorAll('table').forEach(table=>{
+      const parent=table.parentElement;
+      if(!parent || parent.classList.contains('mobile-table-shell') || parent.classList.contains('table-scroll') || parent.classList.contains('users-table-wrap') || parent.classList.contains('label-table-wrap')) return;
+      const shell=document.createElement('div');
+      shell.className='mobile-table-shell';
+      parent.insertBefore(shell,table);
+      shell.appendChild(table);
+    });
+  }
+  wrapWideTables();
+  const observer=new MutationObserver(mutations=>{
+    for(const mutation of mutations){
+      for(const node of mutation.addedNodes){
+        if(node.nodeType!==1) continue;
+        if(node.matches?.('table')) wrapWideTables(node.parentElement || document);
+        else if(node.querySelector?.('table')) wrapWideTables(node);
+      }
+    }
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
+})();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MM Comercial ERP V11.4 Release Candidate</title>
+  <title>MM Comercial ERP V10.03 Mobile</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -53,10 +53,12 @@
     </div>
   </div>
 
-  <aside class="sidebar">
+  <button id="mobileMenuBtn" class="mobile-menu-btn" type="button" aria-label="Abrir menú" aria-expanded="false">☰</button>
+  <div id="mobileNavBackdrop" class="mobile-nav-backdrop" aria-hidden="true"></div>
+  <aside class="sidebar" id="appSidebar">
     <div class="brand">
       <img src="assets/logo-mm-ferreteria.png" alt="MM Ferretería">
-      <div><b>MM Comercial</b><span>V11.4 RC</span></div>
+      <div><b>MM Comercial</b><span>V10.03 Mobile</span></div>
     </div>
     <nav>
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -70,6 +72,7 @@
       <button data-view="promos">Promociones</button>
       <button data-view="profitability">Rentabilidad</button>
       <button data-view="sales">Ventas</button>
+      <button data-view="reports">Reportes</button>
       <button data-view="settings">Configuración</button>
     </nav>
     <div class="connection"><span id="statusDot"></span><span id="status">Conectando...</span></div>
@@ -531,6 +534,90 @@
     <section id="promos" class="view"><div class="panel"><h3>Promociones sugeridas y manuales</h3><div id="promoManager" class="promoList"></div></div></section>
     <section id="profitability" class="view"><div class="panel"><div class="toolbar"><select id="profitFilter"><option value="top">Mayor ganancia</option><option value="low">Menor ganancia</option><option value="margin-low">Margen bajo</option></select></div><h3 id="profitTitle">Rentabilidad</h3><table id="profitTable"></table></div></section>
     <section id="sales" class="view"><div class="panel"><h3>Ventas recientes</h3><table id="salesTable"></table></div></section>
+
+    <section id="reports" class="view reports-view">
+      <div class="reports-hero panel">
+        <div>
+          <span class="eyebrow">Centro financiero</span>
+          <h2>Reportes y estados financieros</h2>
+          <p>Ventas diarias, semanales y mensuales, gastos, inventario, estado de resultados y balance general. Porque sí, el dinero también necesita que alguien lo vigile.</p>
+        </div>
+        <div class="reports-actions">
+          <button class="ghost" id="exportReportCsvBtn" type="button">Exportar CSV</button>
+          <button class="primary" id="exportReportExcelBtn" type="button">Exportar Excel</button>
+        </div>
+      </div>
+
+      <div class="report-toolbar panel">
+        <label>Reporte
+          <select id="reportType">
+            <option value="daily_sales">Ventas diarias</option>
+            <option value="weekly_sales">Ventas semanales</option>
+            <option value="monthly_sales">Ventas mensuales</option>
+            <option value="expenses">Gastos</option>
+            <option value="inventory">Inventario</option>
+            <option value="income_statement">Estado de resultados</option>
+            <option value="balance_sheet">Balance general</option>
+          </select>
+        </label>
+        <label>Desde <input id="reportStart" type="date"></label>
+        <label>Hasta <input id="reportEnd" type="date"></label>
+        <label>Unidad
+          <select id="reportBusinessUnit">
+            <option value="ALL">Todas</option>
+            <option value="FER">Ferretería</option>
+            <option value="LIB">Librería</option>
+            <option value="FX">Mesa de Cambio</option>
+          </select>
+        </label>
+        <button class="primary" id="generateReportBtn" type="button">Generar</button>
+      </div>
+
+      <div class="reports-grid-kpi">
+        <article><small>Ingresos</small><b id="reportKpiRevenue">C$ 0</b><span>Ventas del periodo</span></article>
+        <article><small>Utilidad bruta</small><b id="reportKpiProfit">C$ 0</b><span>Margen estimado</span></article>
+        <article><small>Gastos</small><b id="reportKpiExpenses">C$ 0</b><span>Salidas registradas</span></article>
+        <article><small>Inventario</small><b id="reportKpiInventory">C$ 0</b><span>Valor al costo</span></article>
+      </div>
+
+      <div class="reports-layout">
+        <div class="panel expense-panel">
+          <h3>Registrar gasto</h3>
+          <p>Controla salidas operativas para que el estado de resultados no sea literatura fantástica.</p>
+          <form id="expenseForm" class="stack-form">
+            <input id="expenseDate" type="date" required>
+            <input id="expenseDescription" placeholder="Descripción del gasto" required>
+            <select id="expenseCategory">
+              <option value="Operativo">Operativo</option>
+              <option value="Servicios básicos">Servicios básicos</option>
+              <option value="Transporte">Transporte</option>
+              <option value="Compra menor">Compra menor</option>
+              <option value="Mantenimiento">Mantenimiento</option>
+              <option value="Planilla">Planilla</option>
+              <option value="Otros">Otros</option>
+            </select>
+            <input id="expenseAmount" type="number" step="0.01" min="0" placeholder="Monto C$" required>
+            <select id="expenseUnit">
+              <option value="FER">Ferretería</option>
+              <option value="LIB">Librería</option>
+              <option value="FX">Mesa de Cambio</option>
+              <option value="GENERAL">General</option>
+            </select>
+            <button class="primary" type="submit">Guardar gasto</button>
+          </form>
+        </div>
+        <div class="panel report-output-panel">
+          <div class="table-toolbar">
+            <div>
+              <h3 id="reportTitle">Reporte</h3>
+              <p id="reportSubtitle">Selecciona un reporte y genera el resultado.</p>
+            </div>
+          </div>
+          <div id="reportSummary" class="financial-summary"></div>
+          <div class="table-scroll"><table id="reportTable"></table></div>
+        </div>
+      </div>
+    </section>
     <section id="settings" class="view">
       <div class="panel">
         <h3>Configuración</h3>
