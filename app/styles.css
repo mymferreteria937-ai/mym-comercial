@@ -1041,3 +1041,113 @@ input,select,textarea,button{max-width:100%;}
   button,select,input[type="button"],input[type="submit"]{min-height:44px;}
   button:hover{transform:none!important;}
 }
+
+/* =========================================================
+   V10.03.1 RESPONSIVE REAL — CAPA FINAL
+   Debe permanecer al final. Corrige y domina estilos heredados.
+========================================================= */
+html{width:100%;max-width:100%;overflow-x:hidden}
+body{width:100%;max-width:100%;min-width:0}
+body,main,.view,.panel,.topbar,.topActions,.sidebar,nav{min-width:0}
+main{width:auto;max-width:100%}
+.view.show{width:100%;max-width:100%}
+img,svg,canvas,video,iframe{max-width:100%;height:auto}
+input,select,textarea,button{max-width:100%}
+.mobile-menu-btn,.mobile-nav-backdrop{display:none}
+.mobile-table-shell,.table-scroll,.label-table-wrap{width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch}
+.panel{min-width:0}
+.grid2>*,.split>*,.posLayout>*,.reports-layout>*,.inventory-workspace>*{min-width:0}
+
+/* Escritorios medianos y portátiles */
+@media (min-width:1181px) and (max-width:1440px){
+  .sidebar{width:220px!important;padding:16px 12px!important}
+  main{padding:22px 22px!important}
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .posLayout{grid-template-columns:minmax(0,1fr) 350px!important}
+  .productGrid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))!important}
+  .inventory-card{grid-template-columns:130px minmax(180px,1fr) 150px 110px 100px 76px!important;gap:10px!important}
+  .reports-layout{grid-template-columns:300px minmax(0,1fr)!important}
+}
+
+/* Tabletas y laptops estrechas: menú lateral tipo drawer */
+@media (max-width:1180px){
+  body{display:block!important;height:auto!important;min-height:100dvh!important;overflow-x:hidden!important;overflow-y:auto!important}
+  main{width:100%!important;max-width:100%!important;min-height:100dvh!important;padding:76px 18px 28px!important;overflow:visible!important}
+  .sidebar{position:fixed!important;inset:0 auto 0 0!important;width:min(86vw,320px)!important;height:100dvh!important;z-index:1001!important;transform:translateX(-105%)!important;transition:transform .24s ease!important;overflow-y:auto!important;overscroll-behavior:contain!important;padding:18px 16px 28px!important}
+  body.mobile-nav-open .sidebar{transform:translateX(0)!important}
+  .mobile-menu-btn{display:grid!important;place-items:center!important;position:fixed!important;top:14px!important;left:14px!important;z-index:1003!important;width:46px!important;height:46px!important;padding:0!important;border-radius:14px!important;background:#0f223d!important;color:#fff!important;border:1px solid rgba(96,165,250,.28)!important;box-shadow:0 12px 30px rgba(0,0,0,.28)!important;font-size:22px!important}
+  .mobile-nav-backdrop{display:block!important;position:fixed!important;inset:0!important;z-index:1000!important;background:rgba(2,6,23,.72)!important;backdrop-filter:blur(3px)!important;opacity:0!important;pointer-events:none!important;transition:opacity .2s ease!important}
+  body.mobile-nav-open .mobile-nav-backdrop{opacity:1!important;pointer-events:auto!important}
+  body.mobile-nav-open{overflow:hidden!important}
+  .topbar{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:12px!important;margin-bottom:16px!important}
+  .topbar>div:first-child{padding-left:52px!important}
+  .topbar h1{font-size:clamp(24px,4vw,30px)!important;line-height:1.08!important}
+  .topActions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important;gap:8px!important}
+  .topActions>*{width:100%!important;min-width:0!important}
+  .grid2,.split,.posLayout,.reports-layout,.users-security-layout,.exchange-grid,.label-center-layout,.inventory-workspace,.product-form-sections-v1003{grid-template-columns:minmax(0,1fr)!important}
+  .salePanel,.security-user-form,.inventory-detail-panel{position:relative!important;top:auto!important}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .productGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;max-height:none!important;overflow:visible!important;padding-right:0!important}
+  .panel{max-width:100%!important;overflow:hidden!important}
+  .toolbar{flex-wrap:wrap!important}
+  .toolbar input,.toolbar select{flex:1 1 180px!important}
+  .section-header,.inventory-pro-header,.reports-hero,.exchange-header{flex-direction:column!important;align-items:stretch!important;gap:12px!important}
+  .formGrid,.formGridV1003,.cash-form-grid,.settings-grid-v1003,.payment-mixed-v1003,.report-toolbar,.financial-summary,.closing-detail-header,.closing-detail-kpis{grid-template-columns:minmax(0,1fr)!important}
+  .full-span,.formGridV1003 label.wide{grid-column:auto!important}
+  .inventory-card{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}
+  .modal{padding:12px!important;align-items:flex-start!important;overflow-y:auto!important}
+  .modalCard{width:min(100%,720px)!important;max-width:100%!important;max-height:calc(100dvh - 24px)!important;overflow:auto!important;margin:auto!important;padding:16px!important}
+  .modalActions{position:sticky!important;bottom:-16px!important;background:inherit!important;padding:10px 0 0!important;flex-wrap:wrap!important}
+}
+
+/* Teléfonos y tabletas verticales */
+@media (max-width:768px){
+  main{padding:72px 12px 22px!important}
+  .topbar>div:first-child{padding-left:52px!important}
+  .topActions{grid-template-columns:minmax(0,1fr)!important}
+  .topActions #currentUserBadge{order:-1}
+  .kpis,.dashboard-goals-v112,.comparison-grid-v112,.exchange-rate-strip-v112,.reports-grid-kpi,.inventory-kpis,.inventory-editor-summary-v1003,.product-code-preview-v1003{grid-template-columns:minmax(0,1fr)!important}
+  .panel,.kpis article{border-radius:16px!important;padding:14px!important}
+  .productGrid{grid-template-columns:minmax(0,1fr)!important;gap:10px!important}
+  .productCard{min-height:auto!important}
+  .inventory-card{grid-template-columns:minmax(0,1fr)!important}
+  .inv-card-metrics{grid-template-columns:minmax(0,1fr)!important}
+  .toolbar,.form-actions-row,.user-actions,.reports-actions,.cash-actions{display:grid!important;grid-template-columns:minmax(0,1fr)!important;width:100%!important}
+  .toolbar>* ,.form-actions-row>* ,.user-actions>* ,.reports-actions>* ,.cash-actions>*{width:100%!important}
+  .formRow{display:grid!important;grid-template-columns:minmax(0,1fr)!important}
+  .cartLine{grid-template-columns:minmax(0,1fr)!important;gap:8px!important}
+  .cartLine .removeBtn{width:100%!important}
+  .denomination-row{display:grid!important;grid-template-columns:90px minmax(0,1fr)!important;gap:8px!important}
+  .denomination-subtotal{grid-column:1/-1!important;width:100%!important;text-align:right!important}
+  .label-preview-single{overflow:auto!important;max-width:100%!important;padding:18px 8px!important}
+  .tabs,.label-tabs{overflow-x:auto!important;scroll-snap-type:x proximity!important;flex-wrap:nowrap!important}
+  .tabs button,.label-tabs button{flex:0 0 auto!important;scroll-snap-align:start!important;min-height:44px!important}
+  .users-table,.label-products-table,#reportTable,.mini-table{min-width:680px!important}
+  th,td{white-space:nowrap!important}
+  .salePanel #finishSale{position:sticky!important;bottom:8px!important;z-index:5!important;min-height:50px!important}
+}
+
+/* Teléfonos pequeños */
+@media (max-width:480px){
+  main{padding:68px 8px 18px!important}
+  .mobile-menu-btn{top:10px!important;left:10px!important;width:42px!important;height:42px!important}
+  .topbar>div:first-child{padding-left:48px!important}
+  .topbar h1{font-size:23px!important}
+  .topbar p{font-size:12px!important}
+  .panel,.kpis article{padding:12px!important;border-radius:14px!important}
+  .bigSearch{font-size:16px!important;padding:13px!important}
+  .totals>div{gap:10px!important;align-items:flex-start!important}
+  .totals input{width:100px!important}
+  .grand b{font-size:22px!important}
+  .login-portal,.password-modal{padding:10px!important;overflow-y:auto!important}
+  .login-card,.password-card{width:100%!important;max-width:100%!important;padding:16px!important;border-radius:18px!important}
+  #ticketModal .modalCard{width:min(100%,340px)!important}
+  #ticket80{width:100%!important;max-width:290px!important;margin:auto!important}
+  button,input,select,textarea{font-size:14px!important}
+}
+
+@media (hover:none) and (pointer:coarse){
+  button,select,input[type="button"],input[type="submit"]{min-height:44px!important}
+  button:hover{transform:none!important}
+}
+
