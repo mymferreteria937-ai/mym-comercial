@@ -11,4 +11,5 @@ window.MM_CONFIG = {
     { bank: 'LAFISE', account: '0000-0000-0000', owner: 'MM Ferretería' }
   ],
   TASA_OFICIAL_BANCO: 36.6243,
-  TASA_POS_TIENDA: 36.174
+  TASA_POS_TIENDA: 36.1743
+};
