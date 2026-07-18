@@ -4423,7 +4423,7 @@ finishSale=async function(){
   const err=validatePaymentV1003(); if(err) return showToastV1043(err,'warning');
   const method=paymentMethodV1003(), bal=paymentBalanceV1003(), total=saleTotal();
   const profit=cart.reduce((a,i)=>a+((i.unit_price-i.unit_cost)*Number(i.qty)),0);
-  const basePayload={invoice_no:'MM-'+Date.now(),customer_id:selectedCustomer?.id||null,payment_method:method,subtotal:cartSubtotal(),discount:saleDiscount(),tax:0,total,amount_received:method==='MIXTO'?bal.paid:Number($('#amountReceived')?.value||total),change_amount:method==='EFECTIVO'?Math.max(0,Number($('#amountReceived')?.value||0)-total):0,status:'COMPLETED',invoice_type:'TICKET',payment_reference:$('#paymentReference')?.value||null,cash_session_id:sessionId,profit_total:profit};
+  const basePayload={invoice_no:'MM-'+Date.now(),customer_id:selectedCustomer?.id||null,customer_name:selectedCustomer?.name||($('#customerSearch')?.value||'').trim()||'Cliente eventual',customer_phone:selectedCustomer?.phone||null,payment_method:method,subtotal:cartSubtotal(),discount:saleDiscount(),tax:0,total,amount_received:method==='MIXTO'?bal.paid:Number($('#amountReceived')?.value||total),change_amount:method==='EFECTIVO'?Math.max(0,Number($('#amountReceived')?.value||0)-total):0,status:'COMPLETED',invoice_type:'TICKET',payment_reference:$('#paymentReference')?.value||null,cash_session_id:sessionId,profit_total:profit};
   const extended={...basePayload,payment_cash_amount:bal.cash,payment_card_amount:bal.card,payment_transfer_amount:bal.transfer,auto_discount_amount:autoDiscountV1003(),commercial_policy:policyV1003()};
   let {data:sale,error:se}=await sb.from('sales').insert(extended).select().single();
   if(se && String(se.message||'').includes('payment_cash_amount')) ({data:sale,error:se}=await sb.from('sales').insert(basePayload).select().single());
@@ -4435,7 +4435,7 @@ finishSale=async function(){
     await sb.from('products').update({stock:Number(i.stock)-Number(i.qty)}).eq('id',i.id);
     await sb.from('inventory_movements').insert({product_id:i.id,movement_type:'SALIDA',quantity:i.qty,reference:sale.invoice_no,notes:'Venta POS V10.03'});
   }
-  lastSale={...sale,...extended,items,customer_name:selectedCustomer?.name||'Cliente eventual'};
+  lastSale={...sale,...extended,items,customer_name:basePayload.customer_name,customer_phone:basePayload.customer_phone};
   renderTicket(lastSale); $('#ticketModal')?.classList.remove('hidden');
   cart=[]; selectedCustomer=null; if($('#customerSearch')) $('#customerSearch').value=''; ['amountReceived','saleDiscount','paymentReference','payCashAmount','payCardAmount','payTransferAmount'].forEach(id=>{if($('#'+id)) $('#'+id).value=id==='saleDiscount'?'0':'';});
   await loadAll();
@@ -4830,3 +4830,72 @@ showView=function(id,btn){
   if(actions && !actions.querySelector('[data-test-ticket]'))actions.insertAdjacentHTML('afterbegin','<button type="button" data-test-ticket class="ghost" onclick="printTestTicketV1213()">Imprimir prueba</button>');
   setTimeout(()=>{enhancePrinterSettingsV1213();ensureCustomMarginV1213();},500);
 })();
+
+
+/* ============================================================
+   MM Comercial V12.14 - Clientes en factura y reimpresión
+   ============================================================ */
+function customerNameForSaleV1214(sale){
+  if(sale?.customer_name) return sale.customer_name;
+  const c=clients.find(x=>String(x.id)===String(sale?.customer_id));
+  return c?.name||'Cliente eventual';
+}
+function customerPhoneForSaleV1214(sale){
+  if(sale?.customer_phone) return sale.customer_phone;
+  const c=clients.find(x=>String(x.id)===String(sale?.customer_id));
+  return c?.phone||'';
+}
+window.reprintSaleV1214=function(saleId,printNow=false){
+  const sale=sales.find(x=>String(x.id)===String(saleId));
+  if(!sale) return showToastV1043?.('No se encontró la venta.','error');
+  const items=saleItems.filter(x=>String(x.sale_id)===String(saleId));
+  if(!items.length) return showToastV1043?.('La factura no tiene productos cargados.','warning');
+  lastSale={...sale,items,customer_name:customerNameForSaleV1214(sale),customer_phone:customerPhoneForSaleV1214(sale)};
+  renderTicket(lastSale);
+  $('#ticketModal')?.classList.remove('hidden');
+  if(printNow) setTimeout(()=>window.printTicket(),180);
+};
+window.viewSaleV1214=function(saleId){window.reprintSaleV1214(saleId,false)};
+
+renderSales=function(){
+  const q=($('#salesSearchV1214')?.value||'').trim().toLowerCase();
+  const list=sales.filter(s=>{
+    const customer=customerNameForSaleV1214(s);
+    return [s.invoice_no,customer,s.payment_method,s.status].join(' ').toLowerCase().includes(q);
+  });
+  const table=$('#salesTable'); if(!table)return;
+  table.innerHTML='<tr><th>Factura</th><th>Fecha</th><th>Cliente</th><th>Método</th><th>Total</th><th>Estado</th><th>Acciones</th></tr>'+list.map(s=>`<tr><td><b>${s.invoice_no||''}</b></td><td>${new Date(s.created_at).toLocaleString('es-NI')}</td><td>${customerNameForSaleV1214(s)}</td><td>${s.payment_method||''}</td><td>${money(s.total)}</td><td><span class="tag">${s.status||'COMPLETED'}</span></td><td><div class="sales-actions-v1214"><button type="button" class="ghost" onclick="viewSaleV1214('${s.id}')">Ver</button><button type="button" class="primary" onclick="reprintSaleV1214('${s.id}',true)">Reimprimir</button></div></td></tr>`).join('');
+};
+
+function enhanceSalesViewV1214(){
+  const section=$('#sales'); if(!section)return;
+  const panel=section.querySelector('.panel'); if(!panel)return;
+  if(!$('#salesSearchV1214')){
+    const h=panel.querySelector('h3');
+    h?.insertAdjacentHTML('afterend','<div class="sales-toolbar-v1214"><input id="salesSearchV1214" placeholder="Buscar factura, cliente o método de pago"><span>Las facturas pueden abrirse y reimprimirse cuando sea necesario.</span></div>');
+    $('#salesSearchV1214').oninput=renderSales;
+  }
+  renderSales();
+}
+
+// Selección clara del cliente en el POS y nombre libre en el comprobante.
+const selectClientBySearchBaseV1214=selectClientBySearch;
+selectClientBySearch=function(){
+  selectClientBySearchBaseV1214();
+  const typed=($('#customerSearch')?.value||'').trim();
+  const chip=$('#selectedCustomer');
+  if(!selectedCustomer && typed && chip) chip.textContent=`Factura a nombre de: ${typed}`;
+};
+if($('#customerSearch')) $('#customerSearch').oninput=selectClientBySearch;
+
+const showViewBaseV1214=showView;
+showView=function(id,btn){
+  showViewBaseV1214(id,btn);
+  if(id==='sales') enhanceSalesViewV1214();
+};
+
+const loadAllBaseV1214=loadAll;
+loadAll=async function(){
+  await loadAllBaseV1214();
+  if(document.querySelector('#sales.active') || !$('#sales')?.classList.contains('hidden')) enhanceSalesViewV1214();
+};

@@ -1162,3 +1162,7 @@ input,select,textarea,button{max-width:100%}
 #ticketModal .modalCard{max-height:90vh;overflow:auto}
 @media(max-width:720px){.printer-grid-v1213{grid-template-columns:1fr}}
 @media print{#ticketModal{display:none!important}}
+
+
+/* V12.14 - historial y reimpresión */
+.sales-toolbar-v1214{display:flex;gap:14px;align-items:center;justify-content:space-between;margin:12px 0 16px}.sales-toolbar-v1214 input{min-width:320px;flex:1}.sales-toolbar-v1214 span{font-size:12px;color:var(--muted)}.sales-actions-v1214{display:flex;gap:7px;white-space:nowrap}.sales-actions-v1214 button{padding:8px 10px}@media(max-width:760px){.sales-toolbar-v1214{align-items:stretch;flex-direction:column}.sales-toolbar-v1214 input{min-width:0;width:100%}.sales-actions-v1214{flex-direction:column}}
