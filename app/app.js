@@ -1,5 +1,5 @@
 const cfg = window.MM_CONFIG || {};
-if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_ANON_KEY === 'TU_ANON_KEY') alert('Configura app/config.js con tu URL y anon key real de Supabase. Sí, las llaves otra vez.');
+if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_ANON_KEY === 'TU_ANON_KEY') alert('Falta configurar la conexión con Supabase en app/config.js.');
 const sb = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
 const $ = s => document.querySelector(s);
 const money = n => `C$ ${Math.ceil(Number(n||0)).toLocaleString('es-NI')}`;
@@ -1948,7 +1948,7 @@ function baseInventoryRowsV105(){
 
   if(q){
     rows=rows.filter(p=>normV104([
-      p.internal_code,p.barcode,p.supplier_code,p.manufacturer_code,p.name,p.clean_name,
+      p.internal_code,p.barcode,p.supplier_code,p.supplier_name,p.manufacturer_code,p.name,p.clean_name,
       p.aliases,p.synonyms,p.brand,p.model,p.location,p.unit_type,p.sale_type,
       categoryObjV104(p)?.name,productBusinessUnitObjV104(p).name
     ].join(' ')).includes(q));
@@ -4899,3 +4899,127 @@ loadAll=async function(){
   await loadAllBaseV1214();
   if(document.querySelector('#sales.active') || !$('#sales')?.classList.contains('hidden')) enhanceSalesViewV1214();
 };
+
+/* =========================================================
+   V12.15 - Dashboard por unidad, proveedor y etiquetas térmicas
+   ========================================================= */
+function selectedDashboardUnitV1215(){
+  return typeof selectedUnitCodeV104==='function' ? String(selectedUnitCodeV104()).toUpperCase() : 'ALL';
+}
+function itemUnitCodeV1215(item){
+  if(item.business_unit_code) return String(item.business_unit_code).toUpperCase();
+  if(item.business_unit_id){
+    const unit=typeof businessUnitByAnyV107==='function' ? businessUnitByAnyV107(item.business_unit_id) : null;
+    if(unit?.code) return String(unit.code).toUpperCase();
+  }
+  const product=(products||[]).find(p=>String(p.id)===String(item.product_id));
+  return product && typeof productBusinessUnitCodeV104==='function' ? String(productBusinessUnitCodeV104(product)).toUpperCase() : 'FER';
+}
+function saleMetricsForUnitV1215(unitCode,day){
+  const validSales=(sales||[]).filter(s=>String(s.status||'COMPLETED').toUpperCase()!=='CANCELLED' && (!day||String(s.created_at||'').slice(0,10)===day));
+  let revenue=0, profit=0;
+  validSales.forEach(sale=>{
+    const items=(saleItems||[]).filter(i=>String(i.sale_id)===String(sale.id));
+    if(unitCode==='ALL'){
+      revenue+=Number(sale.total||items.reduce((a,i)=>a+Number(i.total||0),0));
+      profit+=Number(sale.profit_total||items.reduce((a,i)=>a+Number(i.profit_amount||0),0));
+      return;
+    }
+    const gross=items.reduce((a,i)=>a+Number(i.total||0),0);
+    const selected=items.filter(i=>itemUnitCodeV1215(i)===unitCode);
+    const selectedGross=selected.reduce((a,i)=>a+Number(i.total||0),0);
+    const share=gross>0?selectedGross/gross:0;
+    const allocatedDiscount=Number(sale.discount||0)*share;
+    revenue+=Math.max(0,selectedGross-allocatedDiscount);
+    profit+=selected.reduce((a,i)=>a+Number(i.profit_amount||0),0)-allocatedDiscount;
+  });
+  return {revenue,profit};
+}
+function dashboardSalesForUnitV1215(unitCode){
+  return (sales||[]).map(s=>{
+    if(unitCode==='ALL') return {...s,unit_total:Number(s.total||0)};
+    const items=(saleItems||[]).filter(i=>String(i.sale_id)===String(s.id));
+    const gross=items.reduce((a,i)=>a+Number(i.total||0),0);
+    const selectedGross=items.filter(i=>itemUnitCodeV1215(i)===unitCode).reduce((a,i)=>a+Number(i.total||0),0);
+    return {...s,unit_total:Math.max(0,selectedGross-(gross>0?Number(s.discount||0)*(selectedGross/gross):0))};
+  }).filter(s=>s.unit_total>0);
+}
+const renderDashboardBaseV1215=renderDashboard;
+renderDashboard=function(){
+  renderDashboardBaseV1215();
+  const unit=selectedDashboardUnitV1215();
+  const metrics=saleMetricsForUnitV1215(unit,todayISO());
+  if($('#kpiToday')) $('#kpiToday').textContent=money(metrics.revenue);
+  if($('#kpiProfitToday')) $('#kpiProfitToday').textContent=money(metrics.profit);
+  const visibleProducts=(products||[]).filter(p=>unit==='ALL'||String(productBusinessUnitCodeV104(p)).toUpperCase()===unit);
+  if($('#kpiLowStock')) $('#kpiLowStock').textContent=visibleProducts.filter(p=>Number(p.stock)<=Number(p.min_stock)).length;
+  const map={};
+  dashboardSalesForUnitV1215(unit).forEach(s=>{const key=s.customer_id||'eventual';map[key]=(map[key]||0)+s.unit_total;});
+  const rows=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  if($('#dashTopClients')) $('#dashTopClients').innerHTML='<tr><th>Cliente</th><th>Total</th></tr>'+rows.map(([id,total])=>`<tr><td>${id==='eventual'?'Cliente eventual':escapeHtmlV6(clients.find(c=>c.id===id)?.name||id)}</td><td>${money(total)}</td></tr>`).join('');
+};
+
+function restoreSupplierNameV1215(product){
+  const field=$('#supplierName'); if(field) field.value=product?.supplier_name||'';
+}
+const editProductBaseV1215=window.editProduct;
+window.editProduct=function(id){
+  editProductBaseV1215(id);
+  restoreSupplierNameV1215((products||[]).find(p=>String(p.id)===String(id)));
+};
+const resetProductFormBaseV1215=resetProductForm;
+resetProductForm=function(){resetProductFormBaseV1215();restoreSupplierNameV1215(null);};
+const saveProductBaseV1215=saveProduct;
+saveProduct=async function(e){
+  e.preventDefault();
+  const form=$('#productForm');
+  const supplierName=($('#supplierName')?.value||'').trim()||null;
+  const id=$('#productId')?.value;
+  /* La rutina existente conserva todas sus validaciones. Guardamos el proveedor
+     después, únicamente si el producto pudo crearse o actualizarse. */
+  const beforeIds=new Set((products||[]).map(p=>String(p.id)));
+  await saveProductBaseV1215({preventDefault(){}});
+  if(id){
+    const r=await sb.from('products').update({supplier_name:supplierName}).eq('id',id);
+    if(r.error) return alert('No se pudo guardar el proveedor: '+r.error.message);
+  }else{
+    await loadAll();
+    const created=(products||[]).find(p=>!beforeIds.has(String(p.id)));
+    if(created){const r=await sb.from('products').update({supplier_name:supplierName}).eq('id',created.id);if(r.error)return alert('No se pudo guardar el proveedor: '+r.error.message);}
+  }
+  await loadAll();
+};
+if($('#productForm')) $('#productForm').onsubmit=saveProduct;
+
+const inventoryCardBaseV1215=inventoryCardV105;
+inventoryCardV105=function(p){
+  const html=inventoryCardBaseV1215(p);
+  const supplier=p.supplier_name ? ` · Proveedor: ${escapeHtmlV6(p.supplier_name)}` : '';
+  return html.replace(' · Ref:',`${supplier} · Ref:`);
+};
+
+function bindInventoryCategoryV1215(){
+  const filter=$('#inventoryCategoryFilter');
+  if(filter) filter.onchange=()=>{selectedInventoryProductV93=null;renderProducts();};
+}
+setTimeout(bindInventoryCategoryV1215,100);
+
+/* Impresión exacta: una página física por etiqueta, sin longitud de factura. */
+printLabelsV107=function(){
+  const p=selectedLabelProductV91(), preview=$('#labelPreview');
+  if(!p||!preview||preview.innerHTML.includes('label-empty')) return showToastV1043('Seleccioná un producto para imprimir etiqueta.','warning');
+  const qty=Math.max(1,Math.min(200,Number($('#labelQty')?.value||1)));
+  const format=$('#labelFormat')?.value||'thermal_50x30';
+  const size=format==='shelf_70x40'?{w:70,h:40,cls:'label-70x40'}:format==='sheet_a4'?{w:210,h:297,cls:'sheet-a4-label'}:{w:50,h:30,cls:'label-50x30'};
+  const one=preview.querySelector('.thermal-label')?.outerHTML||preview.innerHTML;
+  const pages=Array.from({length:qty},()=>`<div class="label-page">${one}</div>`).join('');
+  const css=`@page{size:${size.w}mm ${size.h}mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Arial,sans-serif}.label-page{width:${size.w}mm;height:${size.h}mm;overflow:hidden;break-after:page;page-break-after:always}.label-page:last-child{break-after:auto;page-break-after:auto}.thermal-label{width:${size.w}mm!important;height:${size.h}mm!important;margin:0!important;border:0!important;box-shadow:none!important;overflow:hidden;background:#fff!important;color:#111!important;display:grid!important;grid-template-rows:auto 1fr auto!important;align-items:center!important;padding:${size.w===70?'4mm':'2.5mm 3mm'}!important}.label-name{text-align:center;font-size:${size.w===70?'12px':'10.5px'};font-weight:900;text-transform:uppercase;overflow:hidden}.barcode-svg{display:block;width:100%;height:${size.w===70?'14mm':'11mm'}}.label-footer{display:grid;grid-template-columns:1fr auto;gap:2mm;align-items:end}.label-price{font-size:${size.w===70?'17px':'13px'};font-weight:900;color:#000}.label-sku{font-size:8px;color:#111}@media print{html,body{width:${size.w}mm;height:${size.h}mm;overflow:hidden}}`;
+  const win=window.open('','mm_label_print','width=420,height=360');
+  if(!win)return showToastV1043('El navegador bloqueó la ventana de impresión. Permití ventanas emergentes.','error');
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiqueta MM Comercial</title><style>${css}</style></head><body>${pages}</body></html>`);win.document.close();
+  if(typeof saveLabelPrintLogV91==='function')saveLabelPrintLogV91(p.id,qty);
+  setTimeout(()=>{win.focus();win.print();},300);win.onafterprint=()=>setTimeout(()=>win.close(),150);
+};
+printLabelsV9=printLabelsV107;
+if($('#printLabels'))$('#printLabels').onclick=printLabelsV107;
+if($('#printSelectedLabels'))$('#printSelectedLabels').onclick=printLabelsV107;
