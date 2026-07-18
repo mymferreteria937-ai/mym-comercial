@@ -4688,17 +4688,33 @@ function savePrintSettingsV1213(){
 }
 function thermalDocumentV1213(content,title='Ticket MM Comercial'){
   const cfg=getPrintSettingsV1213();
-  const width=cfg.width==='58'?'58mm':'80mm';
-  const contentWidth=cfg.width==='58'?'48mm':'72mm';
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
-    @page{size:${width} auto;margin:0}
-    *{box-sizing:border-box}html,body{margin:0;padding:0;width:${width};background:#fff;color:#000}
-    body{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:${cfg.width==='58'?'10px':'11px'};line-height:1.25}
-    .ticket{width:${contentWidth};margin:0 auto;padding:2mm 0 3mm;overflow:hidden}
+  const widthMm=cfg.width==='58'?58:80;
+  const printableMm=cfg.width==='58'?48:72;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style id="pageSizeV1213">
+    @page{size:${widthMm}mm 120mm;margin:0}
+    *{box-sizing:border-box}
+    html,body{margin:0!important;padding:0!important;width:${widthMm}mm!important;min-width:${widthMm}mm!important;max-width:${widthMm}mm!important;background:#fff!important;color:#000!important;overflow:hidden!important}
+    body{font-family:Consolas,"Courier New",monospace;font-size:${cfg.width==='58'?'10px':'11px'};line-height:1.25}
+    .ticket{display:block;width:${printableMm}mm!important;max-width:${printableMm}mm!important;margin:0 auto!important;padding:2mm 0 ${cfg.autoCut?'8mm':'3mm'}!important;overflow:hidden!important}
     h3{font-size:${cfg.width==='58'?'14px':'16px'};margin:0 0 3px}.center{text-align:center}.ticketRow{display:flex;justify-content:space-between;gap:8px}.ticketRow span:last-child,.ticketRow b:last-child{text-align:right;white-space:nowrap}
-    hr{border:0;border-top:1px dashed #000;margin:5px 0}.print-note{margin-top:8px;text-align:center;font-size:9px}
-    @media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-  </style></head><body><div class="ticket">${content}${cfg.autoCut?'<div class="print-note">.</div>':''}</div><script>window.onload=()=>{setTimeout(()=>window.print(),180)}<\/script></body></html>`;
+    hr{border:0;border-top:1px dashed #000;margin:5px 0}.print-note{height:3mm;margin:0;font-size:1px;color:#fff}
+    @media print{html,body{width:${widthMm}mm!important;height:auto!important}.ticket{page-break-after:avoid!important;break-after:avoid-page!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body><div id="thermalTicketV1213" class="ticket">${content}${cfg.autoCut?'<div class="print-note">.</div>':''}</div><script>
+  window.onload=()=>{
+    setTimeout(()=>{
+      const ticket=document.getElementById('thermalTicketV1213');
+      const px=ticket.getBoundingClientRect().height;
+      const heightMm=Math.max(40,Math.ceil((px*25.4/96)+2));
+      document.getElementById('pageSizeV1213').textContent += '@page{size:${widthMm}mm '+heightMm+'mm!important;margin:0!important}';
+      document.documentElement.style.height=heightMm+'mm';
+      document.body.style.height=heightMm+'mm';
+      window.focus();
+      window.print();
+      setTimeout(()=>window.close(),700);
+    },300);
+  };
+  window.onafterprint=()=>setTimeout(()=>window.close(),150);
+  <\/script></body></html>`;
 }
 function printThermalHtmlV1213(content,title){
   const popup=window.open('','MM_TICKET_PRINT','width=420,height=720');
