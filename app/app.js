@@ -4525,7 +4525,7 @@ function ensureInventoryFormV1003(){
       <div>
         <span class="editor-kicker-v1003">Maestro de Producto</span>
         <h3 id="productEditorTitleV1003">Nuevo producto</h3>
-        <p>Ficha completa de inventario, precio, unidades, códigos y ubicación. Nada de campos mudos con números misteriosos, porque aparentemente los humanos necesitan saber qué están viendo.</p>
+        <p>Ficha completa de inventario, precios, unidades, códigos, proveedor y ubicación.</p>
       </div>
       <div class="editor-status-v1003"><span class="version-pill">V10.03</span><button type="button" id="cancelProductTopV1003" class="ghost">Cerrar</button></div>
     </div>
@@ -4537,6 +4537,7 @@ function ensureInventoryFormV1003(){
         <label>Categoría<select id="categorySelect"></select></label>
         <label class="wide">Nombre comercial<input id="productName" required placeholder="Ej. Cemento Canal 42.5 kg"></label>
         <label>Marca<input id="brand" placeholder="Marca"></label>
+        <label>Proveedor<input id="supplierName" placeholder="Nombre del proveedor principal"></label>
         <label>Código fabricante<input id="manufacturerCode" placeholder="Código del fabricante"></label>
         <label>Código proveedor<input id="supplierCode" placeholder="Código del proveedor"></label>
         <label class="wide">Alias / nombres comunes<input id="productAlias" placeholder="Cómo lo pide el cliente en mostrador"></label>
@@ -4906,6 +4907,11 @@ loadAll=async function(){
 function selectedDashboardUnitV1215(){
   return typeof selectedUnitCodeV104==='function' ? String(selectedUnitCodeV104()).toUpperCase() : 'ALL';
 }
+function localDateNicaraguaV1215(value=new Date()){
+  const date=value instanceof Date?value:new Date(value);
+  if(Number.isNaN(date.getTime())) return String(value||'').slice(0,10);
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Managua',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
+}
 function itemUnitCodeV1215(item){
   if(item.business_unit_code) return String(item.business_unit_code).toUpperCase();
   if(item.business_unit_id){
@@ -4916,7 +4922,7 @@ function itemUnitCodeV1215(item){
   return product && typeof productBusinessUnitCodeV104==='function' ? String(productBusinessUnitCodeV104(product)).toUpperCase() : 'FER';
 }
 function saleMetricsForUnitV1215(unitCode,day){
-  const validSales=(sales||[]).filter(s=>String(s.status||'COMPLETED').toUpperCase()!=='CANCELLED' && (!day||String(s.created_at||'').slice(0,10)===day));
+  const validSales=(sales||[]).filter(s=>String(s.status||'COMPLETED').toUpperCase()!=='CANCELLED' && (!day||localDateNicaraguaV1215(s.created_at)===day));
   let revenue=0, profit=0;
   validSales.forEach(sale=>{
     const items=(saleItems||[]).filter(i=>String(i.sale_id)===String(sale.id));
@@ -4948,9 +4954,10 @@ const renderDashboardBaseV1215=renderDashboard;
 renderDashboard=function(){
   renderDashboardBaseV1215();
   const unit=selectedDashboardUnitV1215();
-  const metrics=saleMetricsForUnitV1215(unit,todayISO());
+  const metrics=saleMetricsForUnitV1215(unit,localDateNicaraguaV1215());
   if($('#kpiToday')) $('#kpiToday').textContent=money(metrics.revenue);
   if($('#kpiProfitToday')) $('#kpiProfitToday').textContent=money(metrics.profit);
+  if($('#kpiProfitScope')) $('#kpiProfitScope').textContent=unit==='FER'?'Solo ventas de Ferretería':unit==='LIB'?'Solo ventas de Librería':'Ferretería + Librería';
   const visibleProducts=(products||[]).filter(p=>unit==='ALL'||String(productBusinessUnitCodeV104(p)).toUpperCase()===unit);
   if($('#kpiLowStock')) $('#kpiLowStock').textContent=visibleProducts.filter(p=>Number(p.stock)<=Number(p.min_stock)).length;
   const map={};
@@ -5023,3 +5030,10 @@ printLabelsV107=function(){
 printLabelsV9=printLabelsV107;
 if($('#printLabels'))$('#printLabels').onclick=printLabelsV107;
 if($('#printSelectedLabels'))$('#printSelectedLabels').onclick=printLabelsV107;
+
+function applyVersionV1215(){
+  if(document.querySelector('title')) document.querySelector('title').textContent='MYM Comercial ERP V12.15';
+  if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.15';
+  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.15');
+}
+setTimeout(applyVersionV1215,900);
