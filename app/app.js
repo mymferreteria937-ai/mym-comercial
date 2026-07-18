@@ -4670,3 +4670,147 @@ setTimeout(()=>{try{ensureInventoryFormV1003(); if($('#newProductBtn')) $('#newP
   });
   observer.observe(document.body,{childList:true,subtree:true});
 })();
+
+/* ==========================================================
+   V12.13 — Impresión térmica + margen personalizado
+   - Tickets 58/80 mm en ventana limpia, con prueba de impresión.
+   - Margen editable: 35, 40, 50, personalizado o precio manual.
+========================================================== */
+const MM_PRINT_SETTINGS_V1213_KEY='mm_print_settings_v1213';
+function getPrintSettingsV1213(){
+  try{return {...{width:'80',autoCut:true},...JSON.parse(localStorage.getItem(MM_PRINT_SETTINGS_V1213_KEY)||'{}')}}catch(_){return {width:'80',autoCut:true}}
+}
+function savePrintSettingsV1213(){
+  const width=document.querySelector('#thermalWidthV1213')?.value||'80';
+  const autoCut=Boolean(document.querySelector('#thermalCutV1213')?.checked);
+  localStorage.setItem(MM_PRINT_SETTINGS_V1213_KEY,JSON.stringify({width,autoCut}));
+  if(typeof showToastV1043==='function') showToastV1043('Configuración de impresión guardada.');
+}
+function thermalDocumentV1213(content,title='Ticket MM Comercial'){
+  const cfg=getPrintSettingsV1213();
+  const width=cfg.width==='58'?'58mm':'80mm';
+  const contentWidth=cfg.width==='58'?'48mm':'72mm';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
+    @page{size:${width} auto;margin:0}
+    *{box-sizing:border-box}html,body{margin:0;padding:0;width:${width};background:#fff;color:#000}
+    body{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:${cfg.width==='58'?'10px':'11px'};line-height:1.25}
+    .ticket{width:${contentWidth};margin:0 auto;padding:2mm 0 3mm;overflow:hidden}
+    h3{font-size:${cfg.width==='58'?'14px':'16px'};margin:0 0 3px}.center{text-align:center}.ticketRow{display:flex;justify-content:space-between;gap:8px}.ticketRow span:last-child,.ticketRow b:last-child{text-align:right;white-space:nowrap}
+    hr{border:0;border-top:1px dashed #000;margin:5px 0}.print-note{margin-top:8px;text-align:center;font-size:9px}
+    @media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body><div class="ticket">${content}${cfg.autoCut?'<div class="print-note">.</div>':''}</div><script>window.onload=()=>{setTimeout(()=>window.print(),180)}<\/script></body></html>`;
+}
+function printThermalHtmlV1213(content,title){
+  const popup=window.open('','MM_TICKET_PRINT','width=420,height=720');
+  if(!popup){alert('El navegador bloqueó la ventana de impresión. Permití ventanas emergentes para este sitio.');return}
+  popup.document.open(); popup.document.write(thermalDocumentV1213(content,title)); popup.document.close();
+}
+window.printTicket=function(){
+  const ticket=document.querySelector('#ticket80');
+  if(!ticket)return;
+  printThermalHtmlV1213(ticket.innerHTML,'Factura MM Comercial');
+};
+window.printTestTicketV1213=function(){
+  const cfg=getPrintSettingsV1213();
+  const sample=`<h3 class="center">MM FERRETERÍA</h3><div class="center">TICKET DE PRUEBA<br>${cfg.width} mm</div><hr><div class="ticketRow"><span>Producto de prueba</span><span>C$ 10.00</span></div><hr><div class="ticketRow"><b>TOTAL</b><b>C$ 10.00</b></div><hr><div class="center">Impresora configurada correctamente<br>${new Date().toLocaleString('es-NI')}</div>`;
+  printThermalHtmlV1213(sample,'Prueba impresora térmica');
+};
+function enhancePrinterSettingsV1213(){
+  const settings=document.querySelector('#settings .panel');
+  if(!settings || settings.querySelector('#printerSettingsV1213'))return;
+  const cfg=getPrintSettingsV1213();
+  settings.insertAdjacentHTML('beforeend',`<div id="printerSettingsV1213" class="printer-settings-v1213"><div><h4>Impresora térmica</h4><p>Configura el ancho real del papel. La factura se imprime únicamente hasta donde termina el contenido, sin convertir el recibo en una sábana.</p></div><div class="printer-grid-v1213"><label>Ancho del papel<select id="thermalWidthV1213"><option value="80" ${cfg.width==='80'?'selected':''}>80 mm — 3nStar NPT004</option><option value="58" ${cfg.width==='58'?'selected':''}>58 mm</option></select></label><label class="check-v1213"><input id="thermalCutV1213" type="checkbox" ${cfg.autoCut?'checked':''}> Agregar espacio para corte automático</label></div><div class="toolbar"><button type="button" class="primary" onclick="savePrintSettingsV1213()">Guardar impresión</button><button type="button" class="ghost" onclick="printTestTicketV1213()">Imprimir prueba</button></div></div>`);
+}
+window.savePrintSettingsV1213=savePrintSettingsV1213;
+
+function ensureCustomMarginV1213(){
+  const select=document.querySelector('#profitMargin');
+  if(!select)return;
+  if(!select.querySelector('option[value="custom"]')){
+    const manual=select.querySelector('option[value="manual"]');
+    const opt=document.createElement('option'); opt.value='custom'; opt.textContent='Otro porcentaje';
+    select.insertBefore(opt,manual||null);
+  }
+  let field=document.querySelector('#customMarginV1213');
+  if(!field){
+    field=document.createElement('input'); field.id='customMarginV1213'; field.type='number'; field.min='0'; field.step='0.01'; field.placeholder='Escribí el %'; field.className='hidden';
+    select.insertAdjacentElement('afterend',field);
+  }
+  const sync=()=>{
+    const mode=select.value;
+    field.classList.toggle('hidden',mode!=='custom');
+    const sale=document.querySelector('#salePrice');
+    if(sale){sale.readOnly=mode!=='manual'; sale.classList.toggle('manual-price-v1213',mode==='manual');}
+    calcSalePriceV1213();
+  };
+  select.onchange=sync;
+  field.oninput=()=>{calcSalePriceV1213(); if(typeof updateInventorySummaryV1003==='function')updateInventorySummaryV1003();};
+  document.querySelector('#purchasePrice')?.addEventListener('input',()=>{calcSalePriceV1213(); if(typeof updateInventorySummaryV1003==='function')updateInventorySummaryV1003();});
+  document.querySelector('#salePrice')?.addEventListener('input',()=>{if(select.value==='manual'&&typeof updateInventorySummaryV1003==='function')updateInventorySummaryV1003();});
+  sync();
+}
+function selectedMarginV1213(){
+  const mode=document.querySelector('#profitMargin')?.value||'35';
+  if(mode==='manual')return null;
+  if(mode==='custom')return Math.max(0,Number(document.querySelector('#customMarginV1213')?.value||0));
+  return Math.max(0,Number(mode||35));
+}
+function calcSalePriceV1213(){
+  const select=document.querySelector('#profitMargin'), saleEl=document.querySelector('#salePrice');
+  if(!select||!saleEl||select.value==='manual')return;
+  const cost=Math.max(0,Number(document.querySelector('#purchasePrice')?.value||0));
+  const margin=selectedMarginV1213()||0;
+  saleEl.value=(cost*(1+margin/100)).toFixed(2);
+}
+calcSalePrice=calcSalePriceV1213;
+
+const saveProductBaseV1213=saveProduct;
+saveProduct=async function(e){
+  e.preventDefault(); if(!guardAdmin())return;
+  const select=document.querySelector('#profitMargin');
+  if(!select)return saveProductBaseV1213(e);
+  const mode=select.value, manual=mode==='manual', margin=manual?0:selectedMarginV1213();
+  const cost=Math.max(0,Number(document.querySelector('#purchasePrice')?.value||0));
+  const sale=manual?Number(document.querySelector('#salePrice')?.value||0):Number((cost*(1+margin/100)).toFixed(2));
+  if(manual && sale<=0){alert('Ingresá un precio manual mayor que cero.');return}
+  const categoryId=document.querySelector('#categorySelect')?.value||null;
+  const payload={supplier_code:document.querySelector('#supplierCode')?.value||null,name:document.querySelector('#productName')?.value,category_id:categoryId,brand:document.querySelector('#brand')?.value||null,unit_type:document.querySelector('#unitType')?.value||'UND',purchase_price:cost,profit_margin:margin,allow_manual_price:manual,sale_price:sale,public_price:sale,stock:Number(document.querySelector('#stock')?.value||0),min_stock:Number(document.querySelector('#minStock')?.value||0),max_stock:Number(document.querySelector('#maxStock')?.value||0),location:document.querySelector('#location')?.value||null,last_cost_update:new Date().toISOString(),business_unit_id:document.querySelector('#productBusinessUnit')?.value||null,sale_type:document.querySelector('#saleType')?.value||'UNIDAD',allows_decimal:typeof isDecimalUnitV102==='function'?isDecimalUnitV102(document.querySelector('#unitType')?.value):false,manufacturer_code:document.querySelector('#manufacturerCode')?.value||null,aliases:document.querySelector('#productAlias')?.value||null};
+  let r; const id=document.querySelector('#productId')?.value;
+  if(id)r=await sb.from('products').update(payload).eq('id',id);
+  else{const code=typeof generateProductCodeV106==='function'?await generateProductCodeV106(categoryId):('MM-GEN-'+Date.now());r=await sb.from('products').insert({...payload,internal_code:code,barcode:code,status:'ACTIVE'});}
+  if(r.error){alert(r.error.message);return}
+  resetProductForm(); await loadAll();
+};
+
+const editProductBaseV1213=window.editProduct;
+window.editProduct=function(id){
+  if(typeof editProductBaseV1213==='function')editProductBaseV1213(id);
+  setTimeout(()=>{
+    ensureCustomMarginV1213();
+    const p=(products||[]).find(x=>String(x.id)===String(id)); if(!p)return;
+    const select=document.querySelector('#profitMargin'), custom=document.querySelector('#customMarginV1213');
+    const margin=Number(p.profit_margin||0);
+    if(p.allow_manual_price)select.value='manual';
+    else if([35,40,50].includes(margin))select.value=String(margin);
+    else{select.value='custom';custom.value=String(margin);}
+    select.dispatchEvent(new Event('change'));
+    document.querySelector('#salePrice').value=Number(p.sale_price||0).toFixed(2);
+    if(typeof updateInventorySummaryV1003==='function')updateInventorySummaryV1003();
+  },80);
+};
+
+const showViewBaseV1213=showView;
+showView=function(id,btn){
+  showViewBaseV1213(id,btn);
+  if(id==='settings')setTimeout(enhancePrinterSettingsV1213,30);
+  if(id==='products')setTimeout(ensureCustomMarginV1213,60);
+};
+(function bootV1213(){
+  document.title='MM Comercial ERP V12.13';
+  const pill=document.querySelector('.version-pill'); if(pill)pill.textContent='V12.13';
+  const brand=document.querySelector('.brand span'); if(brand)brand.textContent='V12.13';
+  const printBtn=document.querySelector('#ticketModal .modalActions .primary'); if(printBtn)printBtn.textContent='Imprimir ticket';
+  const actions=document.querySelector('#ticketModal .modalActions');
+  if(actions && !actions.querySelector('[data-test-ticket]'))actions.insertAdjacentHTML('afterbegin','<button type="button" data-test-ticket class="ghost" onclick="printTestTicketV1213()">Imprimir prueba</button>');
+  setTimeout(()=>{enhancePrinterSettingsV1213();ensureCustomMarginV1213();},500);
+})();

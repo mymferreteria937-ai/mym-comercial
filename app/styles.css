@@ -1151,3 +1151,14 @@ input,select,textarea,button{max-width:100%}
   button:hover{transform:none!important}
 }
 
+
+/* V12.13 — impresión térmica y margen personalizado */
+.printer-settings-v1213{margin-top:18px;padding:18px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.55)}
+.printer-settings-v1213 h4{margin:0 0 6px}.printer-settings-v1213 p{color:var(--muted);max-width:760px}
+.printer-grid-v1213{display:grid;grid-template-columns:minmax(240px,360px) 1fr;gap:14px;align-items:end;margin:14px 0}
+.printer-grid-v1213 label{display:grid;gap:7px;font-weight:800}.printer-grid-v1213 .check-v1213{display:flex;align-items:center;gap:9px;padding:12px;border:1px solid var(--line);border-radius:12px}.printer-grid-v1213 input[type="checkbox"]{width:auto}
+#customMarginV1213{border-color:var(--accent);background:#fff8f1}#customMarginV1213.hidden{display:none!important}
+#salePrice[readonly]{background:#eef1f4;color:#374151;font-weight:900}.manual-price-v1213{background:#fff!important;border-color:var(--accent)!important}
+#ticketModal .modalCard{max-height:90vh;overflow:auto}
+@media(max-width:720px){.printer-grid-v1213{grid-template-columns:1fr}}
+@media print{#ticketModal{display:none!important}}

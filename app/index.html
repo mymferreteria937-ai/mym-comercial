@@ -621,7 +621,7 @@
     <section id="settings" class="view">
       <div class="panel">
         <h3>Configuración</h3>
-        <p>Margen estándar 35%, precios redondeados hacia arriba y cuentas bancarias configurables en <code>config.js</code>.</p>
+        <p>Precios, seguridad y configuración operativa del sistema. La impresora térmica puede trabajar en 58 mm u 80 mm.</p>
         <div class="toolbar">
           <button id="changePasswordBtn" class="primary" type="button">Cambiar mi contraseña</button>
         </div>
@@ -638,7 +638,7 @@
       <div class="modalActions"><button onclick="closeCashBreakdown()" class="ghost">Cancelar</button><button onclick="applyCashBreakdown()" class="primary btn-green">Aplicar total</button></div>
     </div>
   </div>
-  <div id="ticketModal" class="modal hidden"><div class="modalCard"><div id="ticket80"></div><div class="modalActions"><button onclick="printTicket()" class="primary">Imprimir Epson 80mm</button><button onclick="closeTicket()" class="ghost">Cerrar</button></div></div></div>
+  <div id="ticketModal" class="modal hidden"><div class="modalCard"><div id="ticket80"></div><div class="modalActions"><button onclick="printTicket()" class="primary">Imprimir ticket</button><button onclick="closeTicket()" class="ghost">Cerrar</button></div></div></div>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
   <script src="app.js"></script>
