@@ -380,7 +380,9 @@ function expectedCashNioV83(s){
   const expenses=Number(s.cash_expenses ?? 0);
   const stored=s.expected_cash_nio ?? s.expected_cash;
   if(String(s.status||'').toUpperCase()==='CLOSED' && stored!==undefined && stored!==null) return Number(stored);
-  return opening + summary.cashNio + summary.mixed - summary.changeNio - expenses;
+  /* sales.total ya representa el importe neto cobrado. Restar change_amount
+     nuevamente descontaba el cambio dos veces y reducía el efectivo esperado. */
+  return opening + summary.cashNio + summary.mixed - expenses;
 }
 function expectedTotalNioV83(s){
   const summary=cashSessionSalesV83(s.id);
@@ -2836,7 +2838,7 @@ updateClosingCashSummaryV84=function(){
   const diffTotal=diffCash+diffCard+diffTransfer;
   box.innerHTML=`<div class="closing-summary-title">Cuadre automático con Mesa de Cambio</div>
     <div class="closing-summary-grid">
-      <div><span>Ventas efectivo C$</span><strong>${money(summary.cashNio+summary.mixed-summary.changeNio)}</strong></div>
+      <div><span>Ventas efectivo C$</span><strong>${money(summary.cashNio+summary.mixed)}</strong></div>
       <div><span>Mesa Cambio C$</span><strong>${money(ex.nioIn-ex.nioOut)}</strong></div>
       <div><span>Efectivo esperado C$</span><strong>${money(expectedCash)}</strong></div>
       <div><span>Efectivo contado C$</span><strong>${money(countedCash)}</strong></div>
