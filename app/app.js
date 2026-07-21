@@ -4692,22 +4692,24 @@ function savePrintSettingsV1213(){
 function thermalDocumentV1213(content,title='Ticket MM Comercial'){
   const cfg=getPrintSettingsV1213();
   const widthMm=cfg.width==='58'?58:80;
-  const printableMm=cfg.width==='58'?48:72;
+  const printableMm=cfg.width==='58'?54:76;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style id="pageSizeV1213">
-    @page{size:${widthMm}mm 120mm;margin:0}
+    @page{size:${widthMm}mm auto;margin:0}
     *{box-sizing:border-box}
-    html,body{margin:0!important;padding:0!important;width:${widthMm}mm!important;min-width:${widthMm}mm!important;max-width:${widthMm}mm!important;background:#fff!important;color:#000!important;overflow:hidden!important}
-    body{font-family:Consolas,"Courier New",monospace;font-size:${cfg.width==='58'?'10px':'11px'};line-height:1.25}
-    .ticket{display:block;width:${printableMm}mm!important;max-width:${printableMm}mm!important;margin:0 auto!important;padding:2mm 0 ${cfg.autoCut?'8mm':'3mm'}!important;overflow:hidden!important}
-    h3{font-size:${cfg.width==='58'?'14px':'16px'};margin:0 0 3px}.center{text-align:center}.ticketRow{display:flex;justify-content:space-between;gap:8px}.ticketRow span:last-child,.ticketRow b:last-child{text-align:right;white-space:nowrap}
-    hr{border:0;border-top:1px dashed #000;margin:5px 0}.print-note{height:3mm;margin:0;font-size:1px;color:#fff}
+    html,body{margin:0!important;padding:0!important;width:${widthMm}mm!important;min-width:${widthMm}mm!important;max-width:${widthMm}mm!important;background:#fff!important;color:#000!important;overflow:visible!important}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:${cfg.width==='58'?'12px':'14px'};font-weight:500;line-height:1.32;writing-mode:horizontal-tb!important}
+    .ticket{display:block;width:${printableMm}mm!important;max-width:${printableMm}mm!important;margin:0 auto!important;padding:2mm 0 ${cfg.autoCut?'2mm':'1mm'}!important;overflow:visible!important}
+    h3{font-size:${cfg.width==='58'?'17px':'20px'};line-height:1.15;margin:0 0 4px;font-weight:900}.center{text-align:center}.ticketRow{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin:2px 0}.ticketRow span:first-child,.ticketRow b:first-child{min-width:0;overflow-wrap:anywhere}.ticketRow span:last-child,.ticketRow b:last-child{text-align:right;white-space:nowrap;font-weight:700}
+    .ticket>div>b{display:block;font-size:${cfg.width==='58'?'12px':'14px'};line-height:1.25;margin-top:4px;overflow-wrap:anywhere}b{font-weight:800}
+    hr{border:0;border-top:1px dashed #000;margin:6px 0}.print-note{height:2mm;margin:0;font-size:1px;color:#fff}
     @media print{html,body{width:${widthMm}mm!important;height:auto!important}.ticket{page-break-after:avoid!important;break-after:avoid-page!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body><div id="thermalTicketV1213" class="ticket">${content}${cfg.autoCut?'<div class="print-note">.</div>':''}</div><script>
   window.onload=()=>{
     setTimeout(()=>{
       const ticket=document.getElementById('thermalTicketV1213');
       const px=ticket.getBoundingClientRect().height;
-      const heightMm=Math.max(40,Math.ceil((px*25.4/96)+2));
+      const contentMm=Math.ceil(px*25.4/96);
+      const heightMm=Math.max(widthMm+1,contentMm+1);
       document.getElementById('pageSizeV1213').textContent += '@page{size:${widthMm}mm '+heightMm+'mm!important;margin:0!important}';
       document.documentElement.style.height=heightMm+'mm';
       document.body.style.height=heightMm+'mm';
@@ -4738,7 +4740,7 @@ function enhancePrinterSettingsV1213(){
   const settings=document.querySelector('#settings .panel');
   if(!settings || settings.querySelector('#printerSettingsV1213'))return;
   const cfg=getPrintSettingsV1213();
-  settings.insertAdjacentHTML('beforeend',`<div id="printerSettingsV1213" class="printer-settings-v1213"><div><h4>Impresora térmica</h4><p>Configura el ancho real del papel. La factura se imprime únicamente hasta donde termina el contenido, sin convertir el recibo en una sábana.</p></div><div class="printer-grid-v1213"><label>Ancho del papel<select id="thermalWidthV1213"><option value="80" ${cfg.width==='80'?'selected':''}>80 mm — 3nStar NPT004</option><option value="58" ${cfg.width==='58'?'selected':''}>58 mm</option></select></label><label class="check-v1213"><input id="thermalCutV1213" type="checkbox" ${cfg.autoCut?'checked':''}> Agregar espacio para corte automático</label></div><div class="toolbar"><button type="button" class="primary" onclick="savePrintSettingsV1213()">Guardar impresión</button><button type="button" class="ghost" onclick="printTestTicketV1213()">Imprimir prueba</button></div></div>`);
+  settings.insertAdjacentHTML('beforeend',`<div id="printerSettingsV1213" class="printer-settings-v1213"><div><h4>Impresora térmica</h4><p>Formato vertical, letra legible y corte ajustado al final del contenido. Esta configuración se utiliza en ventas nuevas y reimpresiones.</p></div><div class="printer-grid-v1213"><label>Ancho del papel<select id="thermalWidthV1213"><option value="80" ${cfg.width==='80'?'selected':''}>80 mm — 3nStar RPT004</option><option value="58" ${cfg.width==='58'?'selected':''}>58 mm</option></select></label><label class="check-v1213"><input id="thermalCutV1213" type="checkbox" ${cfg.autoCut?'checked':''}> Espacio mínimo para corte automático</label></div><div class="toolbar"><button type="button" class="primary" onclick="savePrintSettingsV1213()">Guardar impresión</button><button type="button" class="ghost" onclick="printTestTicketV1213()">Imprimir prueba</button></div></div>`);
 }
 window.savePrintSettingsV1213=savePrintSettingsV1213;
 
@@ -4904,7 +4906,7 @@ loadAll=async function(){
 };
 
 /* =========================================================
-   V12.15 - Dashboard por unidad, proveedor y etiquetas térmicas
+   V12.16 - Impresión térmica vertical y legible
    ========================================================= */
 function selectedDashboardUnitV1215(){
   return typeof selectedUnitCodeV104==='function' ? String(selectedUnitCodeV104()).toUpperCase() : 'ALL';
@@ -5034,8 +5036,98 @@ if($('#printLabels'))$('#printLabels').onclick=printLabelsV107;
 if($('#printSelectedLabels'))$('#printSelectedLabels').onclick=printLabelsV107;
 
 function applyVersionV1215(){
-  if(document.querySelector('title')) document.querySelector('title').textContent='MYM Comercial ERP V12.15';
-  if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.15';
-  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.15');
+  if(document.querySelector('title')) document.querySelector('title').textContent='MYM Comercial ERP V12.16';
+  if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.16';
+  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.16');
 }
 setTimeout(applyVersionV1215,900);
+
+/* =========================================================
+   V12.17 - Historial de ventas por fecha y unidad
+   ========================================================= */
+function saleUnitTotalsV1217(sale,unitCode){
+  const items=(saleItems||[]).filter(i=>String(i.sale_id)===String(sale.id));
+  if(unitCode==='ALL') return {total:Number(sale.total||0),profit:Number(sale.profit_total||0)};
+  const gross=items.reduce((sum,item)=>sum+Number(item.total||0),0);
+  const selected=items.filter(item=>itemUnitCodeV1215(item)===unitCode);
+  const selectedGross=selected.reduce((sum,item)=>sum+Number(item.total||0),0);
+  const share=gross>0?selectedGross/gross:0;
+  const discount=Number(sale.discount||0)*share;
+  return {
+    total:Math.max(0,selectedGross-discount),
+    profit:selected.reduce((sum,item)=>sum+Number(item.profit_amount||0),0)-discount
+  };
+}
+function salesDateValueV1217(id){return document.querySelector(id)?.value||''}
+window.salesTodayV1217=function(){
+  const today=localDateNicaraguaV1215();
+  if($('#salesDateFromV1217')) $('#salesDateFromV1217').value=today;
+  if($('#salesDateToV1217')) $('#salesDateToV1217').value=today;
+  renderSales();
+};
+window.clearSalesDatesV1217=function(){
+  if($('#salesDateFromV1217')) $('#salesDateFromV1217').value='';
+  if($('#salesDateToV1217')) $('#salesDateToV1217').value='';
+  renderSales();
+};
+function salesScopeLabelV1217(unit){return unit==='FER'?'Ferretería':unit==='LIB'?'Librería':'Todas las unidades'}
+renderSales=function(){
+  const table=$('#salesTable'); if(!table)return;
+  const q=($('#salesSearchV1214')?.value||'').trim().toLowerCase();
+  let from=salesDateValueV1217('#salesDateFromV1217');
+  let to=salesDateValueV1217('#salesDateToV1217');
+  if(from&&to&&from>to){const swap=from;from=to;to=swap;}
+  const unit=selectedDashboardUnitV1215();
+  const list=(sales||[]).map(s=>({...s,_unit:saleUnitTotalsV1217(s,unit)})).filter(s=>{
+    const day=localDateNicaraguaV1215(s.created_at);
+    const customer=customerNameForSaleV1214(s);
+    const matchesText=[s.invoice_no,customer,s.payment_method,s.status].join(' ').toLowerCase().includes(q);
+    const matchesDate=(!from||day>=from)&&(!to||day<=to);
+    const matchesUnit=unit==='ALL'||s._unit.total>0;
+    return matchesText&&matchesDate&&matchesUnit;
+  }).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+  const completed=list.filter(s=>String(s.status||'COMPLETED').toUpperCase()!=='CANCELLED');
+  const total=completed.reduce((sum,s)=>sum+s._unit.total,0);
+  const profit=completed.reduce((sum,s)=>sum+s._unit.profit,0);
+  const summary=$('#salesSummaryV1217');
+  if(summary) summary.innerHTML=`<div><small>PERÍODO</small><b>${from||to?(from||'Inicio')+' — '+(to||'Hoy'):'Todas las fechas'}</b></div><div><small>UNIDAD</small><b>${salesScopeLabelV1217(unit)}</b></div><div><small>VENTAS</small><b>${completed.length}</b></div><div><small>TOTAL VENDIDO</small><b>${money(total)}</b></div><div><small>GANANCIA</small><b>${money(profit)}</b></div>`;
+  const header='<tr><th>Factura</th><th>Fecha</th><th>Cliente</th><th>Método</th><th>Total</th><th>Estado</th><th>Acciones</th></tr>';
+  const rows=list.map(s=>`<tr><td><b>${escapeHtmlV6(s.invoice_no||'')}</b></td><td>${new Date(s.created_at).toLocaleString('es-NI',{timeZone:'America/Managua'})}</td><td>${escapeHtmlV6(customerNameForSaleV1214(s))}</td><td>${escapeHtmlV6(s.payment_method||'')}</td><td>${money(s._unit.total)}</td><td><span class="tag">${escapeHtmlV6(s.status||'COMPLETED')}</span></td><td><div class="sales-actions-v1214"><button type="button" class="ghost" onclick="viewSaleV1214('${s.id}')">Ver</button><button type="button" class="primary" onclick="reprintSaleV1214('${s.id}',true)">Reimprimir</button></div></td></tr>`).join('');
+  table.innerHTML=header+(rows||'<tr><td colspan="7" class="sales-empty-v1217">No hay ventas para los filtros seleccionados.</td></tr>');
+};
+function enhanceSalesDatesV1217(){
+  const panel=$('#sales .panel'); if(!panel)return;
+  if(!$('#salesSearchV1214')){
+    const h=panel.querySelector('h3');
+    h?.insertAdjacentHTML('afterend','<div class="sales-toolbar-v1214"><input id="salesSearchV1214" placeholder="Buscar factura, cliente o método de pago"></div>');
+    $('#salesSearchV1214').oninput=renderSales;
+  }
+  if(!$('#salesDatesV1217')){
+    const toolbar=$('#salesSearchV1214')?.closest('.sales-toolbar-v1214');
+    toolbar?.insertAdjacentHTML('afterend','<div id="salesDatesV1217" class="sales-dates-v1217"><label>Desde<input type="date" id="salesDateFromV1217"></label><label>Hasta<input type="date" id="salesDateToV1217"></label><button type="button" class="ghost" onclick="salesTodayV1217()">Hoy</button><button type="button" class="ghost" onclick="clearSalesDatesV1217()">Todas las fechas</button></div><div id="salesSummaryV1217" class="sales-summary-v1217"></div>');
+    $('#salesDateFromV1217').onchange=renderSales;
+    $('#salesDateToV1217').onchange=renderSales;
+  }
+  renderSales();
+}
+const showViewBaseV1217=showView;
+showView=function(id,btn){
+  showViewBaseV1217(id,btn);
+  if(id==='sales') setTimeout(enhanceSalesDatesV1217,30);
+};
+const setBusinessFilterBaseV1217=typeof setBusinessFilterV104==='function'?setBusinessFilterV104:null;
+if(setBusinessFilterBaseV1217){
+  setBusinessFilterV104=function(code){
+    const result=setBusinessFilterBaseV1217(code);
+    if($('#sales')?.classList.contains('show')) setTimeout(renderSales,30);
+    return result;
+  };
+  window.setBusinessFilterV104=setBusinessFilterV104;
+  window.setBusinessFilterV102=setBusinessFilterV104;
+}
+function applyVersionV1217(){
+  if(document.querySelector('title')) document.querySelector('title').textContent='MYM Comercial ERP V12.17';
+  if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.17';
+  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.17');
+}
+setTimeout(applyVersionV1217,1000);
