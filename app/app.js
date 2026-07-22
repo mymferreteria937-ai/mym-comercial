@@ -4703,21 +4703,30 @@ function thermalDocumentV1213(content,title='Ticket MM Comercial'){
     .ticket>div>b{display:block;font-size:${cfg.width==='58'?'12px':'14px'};line-height:1.25;margin-top:4px;overflow-wrap:anywhere}b{font-weight:800}
     hr{border:0;border-top:1px dashed #000;margin:6px 0}.print-note{height:2mm;margin:0;font-size:1px;color:#fff}
     @media print{html,body{width:${widthMm}mm!important;height:auto!important}.ticket{page-break-after:avoid!important;break-after:avoid-page!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-  </style></head><body><div id="thermalTicketV1213" class="ticket">${content}${cfg.autoCut?'<div class="print-note">.</div>':''}</div><script>
-  window.onload=()=>{
-    setTimeout(()=>{
+    .print-fallback-v1218{display:none;position:fixed;left:8px;right:8px;bottom:8px;padding:12px;border:0;border-radius:8px;background:#111;color:#fff;font:700 16px Arial,sans-serif;cursor:pointer}
+    @media screen{.print-fallback-v1218.visible{display:block}}
+    @media print{.print-fallback-v1218{display:none!important}}
+  </style></head><body><div id="thermalTicketV1213" class="ticket">${content}${cfg.autoCut?'<div class="print-note">.</div>':''}</div><button id="printFallbackV1218" class="print-fallback-v1218" type="button" onclick="window.print()">Imprimir ahora</button><script>
+  async function startThermalPrintV1218(){
+    try{
+      if(document.fonts&&document.fonts.ready) await document.fonts.ready;
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
       const ticket=document.getElementById('thermalTicketV1213');
       const px=ticket.getBoundingClientRect().height;
       const contentMm=Math.ceil(px*25.4/96);
-      const heightMm=Math.max(widthMm+1,contentMm+1);
+      const paperWidthMm=${widthMm};
+      const heightMm=Math.max(paperWidthMm+1,contentMm+1);
       document.getElementById('pageSizeV1213').textContent += '@page{size:${widthMm}mm '+heightMm+'mm!important;margin:0!important}';
       document.documentElement.style.height=heightMm+'mm';
       document.body.style.height=heightMm+'mm';
       window.focus();
       window.print();
-      setTimeout(()=>window.close(),700);
-    },300);
-  };
+    }catch(error){
+      console.error('No se pudo iniciar la impresión automática:',error);
+      document.getElementById('printFallbackV1218')?.classList.add('visible');
+    }
+  }
+  window.addEventListener('load',()=>setTimeout(startThermalPrintV1218,180),{once:true});
   window.onafterprint=()=>setTimeout(()=>window.close(),150);
   <\/script></body></html>`;
 }
@@ -5131,3 +5140,11 @@ function applyVersionV1217(){
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.17');
 }
 setTimeout(applyVersionV1217,1000);
+
+/* V12.18 - Corrección del disparo automático de impresión */
+function applyVersionV1218(){
+  if(document.querySelector('title')) document.querySelector('title').textContent='MYM Comercial ERP V12.18';
+  if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.18';
+  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.18');
+}
+setTimeout(applyVersionV1218,1100);
