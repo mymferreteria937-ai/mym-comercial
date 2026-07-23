@@ -4529,7 +4529,7 @@ function ensureInventoryFormV1003(){
         <h3 id="productEditorTitleV1003">Nuevo producto</h3>
         <p>Ficha completa de inventario, precios, unidades, códigos, proveedor y ubicación.</p>
       </div>
-      <div class="editor-status-v1003"><span class="version-pill">V10.03</span><button type="button" id="cancelProductTopV1003" class="ghost">Cerrar</button></div>
+      <div class="editor-status-v1003"><span class="version-pill">V13.6</span><button type="button" id="cancelProductTopV1003" class="ghost">Cerrar</button></div>
     </div>
     <input type="hidden" id="productId">
     <div id="productCodePreviewV1003" class="product-code-preview-v1003 hidden"></div>
@@ -5055,7 +5055,6 @@ function applyVersionV1215(){
   if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.16';
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.16');
 }
-setTimeout(applyVersionV1215,900);
 
 /* =========================================================
    V12.17 - Historial de ventas por fecha y unidad
@@ -5145,7 +5144,6 @@ function applyVersionV1217(){
   if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.17';
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.17');
 }
-setTimeout(applyVersionV1217,1000);
 
 /* V12.18 - Corrección del disparo automático de impresión */
 function applyVersionV1218(){
@@ -5153,7 +5151,6 @@ function applyVersionV1218(){
   if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.18';
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.18');
 }
-setTimeout(applyVersionV1218,1100);
 
 /* V12.19 - Papel térmico sin encabezados ni espacio superior */
 function applyVersionV1219(){
@@ -5161,7 +5158,6 @@ function applyVersionV1219(){
   if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.19';
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.19');
 }
-setTimeout(applyVersionV1219,1200);
 
 /* =========================================================
    V12.20 - Operación estable, política persistente y anulaciones
@@ -5421,7 +5417,6 @@ function applyVersionV1220(){
   if(document.querySelector('.brand span'))document.querySelector('.brand span').textContent='V12.20';
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.20');
 }
-setTimeout(applyVersionV1220,1300);
 setTimeout(()=>{
   try{
     if(localStorage.getItem('mm_session_user')&&!document.body.classList.contains('auth-locked')){
@@ -5429,3 +5424,110 @@ setTimeout(()=>{
     }
   }catch(error){console.warn('Inicio automático V12.20:',error)}
 },1450);
+
+/* =========================================================
+   V12.21 - Gráficos de comportamiento de ventas
+   ========================================================= */
+function reportPeriodLabelV1221(value){
+  const raw=String(value||'');
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+    const [year,month,day]=raw.split('-').map(Number);
+    return new Date(year,month-1,day).toLocaleDateString('es-NI',{day:'2-digit',month:'short'});
+  }
+  if(/^\d{4}-\d{2}$/.test(raw)){
+    const [year,month]=raw.split('-').map(Number);
+    return new Date(year,month-1,1).toLocaleDateString('es-NI',{month:'short',year:'2-digit'});
+  }
+  return raw.replace(/^\d{4}-/,'');
+}
+function compactMoneyV1221(value){
+  const n=Number(value||0);
+  if(Math.abs(n)>=1000000)return `C$ ${(n/1000000).toFixed(1)}M`;
+  if(Math.abs(n)>=1000)return `C$ ${(n/1000).toFixed(n>=10000?0:1)}K`;
+  return `C$ ${Math.round(n)}`;
+}
+function salesTrendSvgV1221(rows,labelKey){
+  const width=900,height=280,left=58,right=18,top=22,bottom=48;
+  const plotW=width-left-right,plotH=height-top-bottom;
+  const max=Math.max(1,...rows.flatMap(r=>[Number(r.total||0),Number(r.utilidad||0)]))*1.08;
+  const x=i=>rows.length<=1?left+plotW/2:left+(i/(rows.length-1))*plotW;
+  const y=v=>top+plotH-(Number(v||0)/max)*plotH;
+  const totalPoints=rows.map((r,i)=>`${x(i)},${y(r.total)}`).join(' ');
+  const profitPoints=rows.map((r,i)=>`${x(i)},${y(r.utilidad)}`).join(' ');
+  const grid=[0,.25,.5,.75,1].map(p=>{
+    const gy=top+plotH-(p*plotH);
+    return `<line x1="${left}" y1="${gy}" x2="${width-right}" y2="${gy}" class="chart-grid-v1221"/><text x="${left-8}" y="${gy+4}" text-anchor="end" class="chart-axis-v1221">${compactMoneyV1221(max*p).replace('C$ ','')}</text>`;
+  }).join('');
+  const step=Math.max(1,Math.ceil(rows.length/7));
+  const labels=rows.map((r,i)=>(i%step===0||i===rows.length-1)?`<text x="${x(i)}" y="${height-17}" text-anchor="middle" class="chart-axis-v1221">${escapeHtmlV14(reportPeriodLabelV1221(r[labelKey]))}</text>`:'').join('');
+  const dots=rows.map((r,i)=>`<circle cx="${x(i)}" cy="${y(r.total)}" r="4" class="chart-dot-sales-v1221"><title>${reportPeriodLabelV1221(r[labelKey])}: ${money(r.total)}</title></circle><circle cx="${x(i)}" cy="${y(r.utilidad)}" r="3.5" class="chart-dot-profit-v1221"><title>Utilidad: ${money(r.utilidad)}</title></circle>`).join('');
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Tendencia de ventas y utilidad">${grid}<polyline points="${totalPoints}" class="chart-line-sales-v1221"/><polyline points="${profitPoints}" class="chart-line-profit-v1221"/>${dots}${labels}</svg>`;
+}
+function invoiceBarsV1221(rows,labelKey){
+  const max=Math.max(1,...rows.map(r=>Number(r.facturas||0)));
+  return rows.map(r=>`<div class="invoice-bar-row-v1221"><span>${escapeHtmlV14(reportPeriodLabelV1221(r[labelKey]))}</span><div><i style="width:${Math.max(3,(Number(r.facturas||0)/max)*100)}%"></i></div><b>${Number(r.facturas||0)}</b></div>`).join('');
+}
+function paymentMixV1221(rows){
+  const cash=rows.reduce((a,r)=>a+Number(r.efectivo||0),0);
+  const card=rows.reduce((a,r)=>a+Number(r.tarjeta||0),0);
+  const transfer=rows.reduce((a,r)=>a+Number(r.transferencia||0),0);
+  const total=Math.max(1,cash+card+transfer);
+  const cashPct=(cash/total)*100,cardPct=(card/total)*100;
+  return {
+    style:`conic-gradient(#f97316 0 ${cashPct}%,#3b82f6 ${cashPct}% ${cashPct+cardPct}%,#22c55e ${cashPct+cardPct}% 100%)`,
+    cash,card,transfer
+  };
+}
+function renderSalesChartsV1221(){
+  const host=$('#salesChartsV1221'); if(!host)return;
+  const type=$('#reportType')?.value||'daily_sales';
+  if(!['daily_sales','weekly_sales','monthly_sales'].includes(type)){
+    host.classList.add('hidden'); host.innerHTML=''; return;
+  }
+  const rows=currentReportV14?.rows||[];
+  host.classList.remove('hidden');
+  if(!rows.length){
+    host.innerHTML='<div class="panel chart-empty-v1221">No hay ventas en el período seleccionado para construir los gráficos.</div>';
+    return;
+  }
+  const labelKey=type==='daily_sales'?'fecha':type==='weekly_sales'?'semana':'mes';
+  const revenue=rows.reduce((a,r)=>a+Number(r.total||0),0);
+  const profit=rows.reduce((a,r)=>a+Number(r.utilidad||0),0);
+  const invoices=rows.reduce((a,r)=>a+Number(r.facturas||0),0);
+  const best=rows.slice().sort((a,b)=>Number(b.total||0)-Number(a.total||0))[0];
+  const mix=paymentMixV1221(rows);
+  host.innerHTML=`
+    <div class="sales-behavior-head-v1221">
+      <div><span class="eyebrow">Comportamiento comercial</span><h3>Cómo se están moviendo las ventas</h3><p>Los gráficos utilizan el mismo período y unidad del reporte.</p></div>
+      <div class="behavior-insights-v1221">
+        <div><small>Mejor período</small><b>${escapeHtmlV14(reportPeriodLabelV1221(best[labelKey]))}</b><span>${money(best.total)}</span></div>
+        <div><small>Ticket promedio</small><b>${money(invoices?revenue/invoices:0)}</b><span>${invoices} factura(s)</span></div>
+        <div><small>Margen estimado</small><b>${revenue?((profit/revenue)*100).toFixed(1):'0.0'}%</b><span>${money(profit)}</span></div>
+      </div>
+    </div>
+    <div class="sales-chart-grid-v1221">
+      <article class="panel trend-chart-v1221"><div class="chart-title-v1221"><div><h4>Ventas y utilidad</h4><p>Evolución en córdobas</p></div><div class="chart-legend-v1221"><span class="sales">Ventas</span><span class="profit">Utilidad</span></div></div>${salesTrendSvgV1221(rows,labelKey)}</article>
+      <article class="panel"><div class="chart-title-v1221"><div><h4>Frecuencia de compra</h4><p>Facturas por período</p></div></div><div class="invoice-bars-v1221">${invoiceBarsV1221(rows,labelKey)}</div></article>
+      <article class="panel"><div class="chart-title-v1221"><div><h4>Métodos de pago</h4><p>Participación sobre las ventas</p></div></div><div class="payment-chart-v1221"><div class="payment-donut-v1221" style="background:${mix.style}"><span>${money(revenue)}</span></div><div class="payment-legend-v1221"><div><i class="cash"></i><span>Efectivo</span><b>${money(mix.cash)}</b></div><div><i class="card"></i><span>Tarjeta</span><b>${money(mix.card)}</b></div><div><i class="transfer"></i><span>Transferencia</span><b>${money(mix.transfer)}</b></div></div></div></article>
+    </div>`;
+}
+const renderReportBaseV1221=renderReportV14;
+renderReportV14=function(){
+  renderReportBaseV1221();
+  renderSalesChartsV1221();
+};
+function applyVersionV1221(){
+  if(document.querySelector('title'))document.querySelector('title').textContent='MYM Comercial ERP V12.21';
+  if(document.querySelector('.brand span'))document.querySelector('.brand span').textContent='V12.21';
+  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.21');
+}
+const MYM_APP_VERSION='V13.6';
+function applyUnifiedVersionV136(){
+  if(document.querySelector('title'))document.querySelector('title').textContent=`MYM Comercial ERP ${MYM_APP_VERSION}`;
+  const brandName=document.querySelector('.brand b');
+  if(brandName)brandName.textContent='MYM Comercial';
+  if(document.querySelector('.brand span'))document.querySelector('.brand span').textContent=MYM_APP_VERSION;
+  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent=MYM_APP_VERSION);
+}
+applyUnifiedVersionV136();
+window.addEventListener('load',applyUnifiedVersionV136,{once:true});
