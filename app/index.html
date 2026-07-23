@@ -109,7 +109,7 @@
       <div class="posLayout">
         <div class="posCatalog panel glass">
           <label>Escanear o buscar producto</label>
-          <input id="posSearch" class="bigSearch" placeholder="Código, barras o nombre del producto">
+          <input id="posSearch" class="bigSearch" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Código, barras o nombre del producto">
           <div id="categoryTabs" class="tabs"></div>
           <div id="posResults" class="productGrid"></div>
         </div>
@@ -170,7 +170,7 @@
       <div class="inventory-workspace">
         <div class="inventory-main-panel panel">
           <div class="inventory-toolbar-pro">
-            <input id="productSearch" placeholder="Buscar por SKU, código, fabricante, nombre, marca, categoría o ubicación">
+            <input id="productSearch" autocomplete="off" autocorrect="off" spellcheck="false" name="inventory_search_no_history" placeholder="Buscar por SKU, código, fabricante, nombre, marca, categoría o ubicación">
             <select id="inventoryCategoryFilter"><option value="ALL">Todas las categorías</option></select>
             <select id="inventoryStockFilter"><option value="ALL">Todo el stock</option><option value="LOW">Stock bajo</option><option value="OUT">Agotados</option><option value="OK">Disponible</option></select>
           </div>

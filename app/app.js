@@ -1784,7 +1784,7 @@ finishSale=async function(){
   if(!sessionId) return alert('Debes abrir/seleccionar caja antes de vender.');
   const total=saleTotal(), received=Number($('#amountReceived').value||0), method=$('#paymentMethod').value;
   if(method==='EFECTIVO'&&received<total) return alert('Monto recibido menor al total.');
-  const profit=cart.reduce((a,i)=>a+((i.unit_price-i.unit_cost)*Number(i.qty)),0);
+  const profit=cart.reduce((a,i)=>a+((i.unit_price-i.unit_cost)*Number(i.qty)),0)-saleDiscount();
   const salePayload={invoice_no:'MM-'+Date.now(),customer_id:selectedCustomer?.id||null,payment_method:method,subtotal:cartSubtotal(),discount:saleDiscount(),tax:0,total,amount_received:received,change_amount:Math.max(0,received-total),status:'COMPLETED',invoice_type:'TICKET',payment_reference:$('#paymentReference').value||null,cash_session_id:sessionId,profit_total:profit};
   const {data:sale,error:se}=await sb.from('sales').insert(salePayload).select().single();
   if(se) return alert(se.message);
@@ -4689,16 +4689,16 @@ function savePrintSettingsV1213(){
   localStorage.setItem(MM_PRINT_SETTINGS_V1213_KEY,JSON.stringify({width,autoCut}));
   if(typeof showToastV1043==='function') showToastV1043('Configuración de impresión guardada.');
 }
-function thermalDocumentV1213(content,title='Ticket MM Comercial'){
+function thermalDocumentV1213(content,title=''){
   const cfg=getPrintSettingsV1213();
   const widthMm=cfg.width==='58'?58:80;
   const printableMm=cfg.width==='58'?54:76;
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style id="pageSizeV1213">
-    @page{size:${widthMm}mm auto;margin:0}
+  return `<!doctype html><html><head><meta charset="utf-8"><title></title><style id="basePrintStyleV1219">
+    @page{size:${widthMm}mm 200mm;margin:0!important}
     *{box-sizing:border-box}
     html,body{margin:0!important;padding:0!important;width:${widthMm}mm!important;min-width:${widthMm}mm!important;max-width:${widthMm}mm!important;background:#fff!important;color:#000!important;overflow:visible!important}
     body{font-family:Arial,Helvetica,sans-serif;font-size:${cfg.width==='58'?'12px':'14px'};font-weight:500;line-height:1.32;writing-mode:horizontal-tb!important}
-    .ticket{display:block;width:${printableMm}mm!important;max-width:${printableMm}mm!important;margin:0 auto!important;padding:2mm 0 ${cfg.autoCut?'2mm':'1mm'}!important;overflow:visible!important}
+    .ticket{display:block;width:${printableMm}mm!important;max-width:${printableMm}mm!important;margin:0 auto!important;padding:1mm 0 ${cfg.autoCut?'2mm':'1mm'}!important;overflow:visible!important}
     h3{font-size:${cfg.width==='58'?'17px':'20px'};line-height:1.15;margin:0 0 4px;font-weight:900}.center{text-align:center}.ticketRow{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin:2px 0}.ticketRow span:first-child,.ticketRow b:first-child{min-width:0;overflow-wrap:anywhere}.ticketRow span:last-child,.ticketRow b:last-child{text-align:right;white-space:nowrap;font-weight:700}
     .ticket>div>b{display:block;font-size:${cfg.width==='58'?'12px':'14px'};line-height:1.25;margin-top:4px;overflow-wrap:anywhere}b{font-weight:800}
     hr{border:0;border-top:1px dashed #000;margin:6px 0}.print-note{height:2mm;margin:0;font-size:1px;color:#fff}
@@ -4715,10 +4715,16 @@ function thermalDocumentV1213(content,title='Ticket MM Comercial'){
       const px=ticket.getBoundingClientRect().height;
       const contentMm=Math.ceil(px*25.4/96);
       const paperWidthMm=${widthMm};
-      const heightMm=Math.max(paperWidthMm+1,contentMm+1);
-      document.getElementById('pageSizeV1213').textContent += '@page{size:${widthMm}mm '+heightMm+'mm!important;margin:0!important}';
+      const heightMm=Math.max(paperWidthMm+1,contentMm+2);
+      const finalPageStyle=document.createElement('style');
+      finalPageStyle.id='finalPageStyleV1219';
+      finalPageStyle.textContent='@page{size:'+paperWidthMm+'mm '+heightMm+'mm!important;margin:0!important}html,body{margin:0!important;padding:0!important}';
+      document.head.appendChild(finalPageStyle);
       document.documentElement.style.height=heightMm+'mm';
       document.body.style.height=heightMm+'mm';
+      document.title='';
+      void document.body.offsetHeight;
+      await new Promise(resolve=>setTimeout(resolve,260));
       window.focus();
       window.print();
     }catch(error){
@@ -4731,19 +4737,19 @@ function thermalDocumentV1213(content,title='Ticket MM Comercial'){
   <\/script></body></html>`;
 }
 function printThermalHtmlV1213(content,title){
-  const popup=window.open('','MM_TICKET_PRINT','width=420,height=720');
+  const popup=window.open('','MM_TICKET_PRINT','width=420,height=720,menubar=no,toolbar=no,location=no,status=no');
   if(!popup){alert('El navegador bloqueó la ventana de impresión. Permití ventanas emergentes para este sitio.');return}
   popup.document.open(); popup.document.write(thermalDocumentV1213(content,title)); popup.document.close();
 }
 window.printTicket=function(){
   const ticket=document.querySelector('#ticket80');
   if(!ticket)return;
-  printThermalHtmlV1213(ticket.innerHTML,'Factura MM Comercial');
+  printThermalHtmlV1213(ticket.innerHTML,'');
 };
 window.printTestTicketV1213=function(){
   const cfg=getPrintSettingsV1213();
   const sample=`<h3 class="center">MM FERRETERÍA</h3><div class="center">TICKET DE PRUEBA<br>${cfg.width} mm</div><hr><div class="ticketRow"><span>Producto de prueba</span><span>C$ 10.00</span></div><hr><div class="ticketRow"><b>TOTAL</b><b>C$ 10.00</b></div><hr><div class="center">Impresora configurada correctamente<br>${new Date().toLocaleString('es-NI')}</div>`;
-  printThermalHtmlV1213(sample,'Prueba impresora térmica');
+  printThermalHtmlV1213(sample,'');
 };
 function enhancePrinterSettingsV1213(){
   const settings=document.querySelector('#settings .panel');
@@ -5148,3 +5154,278 @@ function applyVersionV1218(){
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.18');
 }
 setTimeout(applyVersionV1218,1100);
+
+/* V12.19 - Papel térmico sin encabezados ni espacio superior */
+function applyVersionV1219(){
+  if(document.querySelector('title')) document.querySelector('title').textContent='MYM Comercial ERP V12.19';
+  if(document.querySelector('.brand span')) document.querySelector('.brand span').textContent='V12.19';
+  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.19');
+}
+setTimeout(applyVersionV1219,1200);
+
+/* =========================================================
+   V12.20 - Operación estable, política persistente y anulaciones
+   ========================================================= */
+const DEFAULT_COMMERCIAL_POLICY_V1220={
+  manual_discount_enabled:true,
+  max_manual_discount_percent:10,
+  require_discount_authorization:false,
+  card_fee_included:true,
+  require_transfer_reference:true
+};
+let commercialPolicyV1220={...DEFAULT_COMMERCIAL_POLICY_V1220};
+function normalizedPolicyV1220(value={}){
+  return {
+    ...DEFAULT_COMMERCIAL_POLICY_V1220,
+    ...value,
+    cash_discount_percent:0,
+    transfer_discount_percent:0
+  };
+}
+policyV1003=function(){return normalizedPolicyV1220(commercialPolicyV1220)};
+autoDiscountV1003=function(){return 0};
+saleDiscount=function(){return Math.max(0,Number($('#saleDiscount')?.value||0))};
+saleTotal=function(){return Math.max(0,cartSubtotal()-saleDiscount())};
+saleTotalBeforeAutoDiscountV1003=function(){return saleTotal()};
+
+async function loadCommercialPolicyV1220(){
+  try{
+    const r=await sb.rpc('mm_get_commercial_policy');
+    if(r.error) throw r.error;
+    commercialPolicyV1220=normalizedPolicyV1220(r.data||{});
+  }catch(error){
+    console.warn('Política comercial persistente no disponible:',error);
+    commercialPolicyV1220={...DEFAULT_COMMERCIAL_POLICY_V1220};
+  }
+  localStorage.removeItem('mym_commercial_policy');
+  return commercialPolicyV1220;
+}
+async function saveCommercialPolicyV1220(policy){
+  const actor=getCurrentActorIdV132();
+  const payload=normalizedPolicyV1220(policy);
+  const r=await sb.rpc('mm_save_commercial_policy',{
+    p_actor_id:actor,
+    p_manual_discount_enabled:payload.manual_discount_enabled,
+    p_max_manual_discount_percent:payload.max_manual_discount_percent,
+    p_require_discount_authorization:payload.require_discount_authorization,
+    p_card_fee_included:payload.card_fee_included,
+    p_require_transfer_reference:payload.require_transfer_reference
+  });
+  if(r.error) throw r.error;
+  commercialPolicyV1220=normalizedPolicyV1220(r.data||payload);
+  return commercialPolicyV1220;
+}
+function canAuthorizeDiscountV1220(){
+  return ['ADMIN','SUPERVISOR'].includes(String(currentRole||'').toUpperCase());
+}
+function configureManualDiscountV1220(){
+  const input=$('#saleDiscount'); if(!input)return;
+  const p=policyV1003();
+  input.min='0'; input.step='1'; input.autocomplete='off';
+  input.disabled=!p.manual_discount_enabled;
+  input.readOnly=Boolean(p.require_discount_authorization&&!canAuthorizeDiscountV1220());
+  input.title=!p.manual_discount_enabled
+    ?'Los descuentos manuales están deshabilitados.'
+    :input.readOnly?'Requiere autorización de Administrador o Supervisor.'
+    :`Descuento manual máximo: ${Number(p.max_manual_discount_percent||0)}%`;
+}
+function validateManualDiscountV1220(){
+  const p=policyV1003();
+  const discount=saleDiscount();
+  if(discount<=0)return '';
+  if(!p.manual_discount_enabled)return 'Los descuentos manuales están deshabilitados.';
+  if(p.require_discount_authorization&&!canAuthorizeDiscountV1220())return 'El descuento requiere autorización de Administrador o Supervisor.';
+  const maximum=cartSubtotal()*(Number(p.max_manual_discount_percent||0)/100);
+  if(discount>maximum+0.009)return `El descuento supera el máximo permitido de ${Number(p.max_manual_discount_percent||0)}%.`;
+  return '';
+}
+const validatePaymentBaseV1220=validatePaymentV1003;
+validatePaymentV1003=function(){
+  const discountError=validateManualDiscountV1220();
+  return discountError||validatePaymentBaseV1220();
+};
+const renderCartBaseV1220=renderCart;
+renderCart=function(){
+  renderCartBaseV1220();
+  configureManualDiscountV1220();
+  const badge=$('#autoDiscountBadgeV1003');
+  if(badge){
+    const discount=saleDiscount();
+    badge.innerHTML=`<span>Descuento manual${discount>0?' aplicado':' bajo solicitud'}</span><b>${money(discount)}</b>`;
+    badge.classList.toggle('active',discount>0);
+  }
+  const note=$('#paymentPolicyNote');
+  if(note) note.textContent='El método de pago no genera descuentos automáticos.';
+};
+renderPaymentDetails=function(){
+  const m=paymentMethodV1003(); const p=policyV1003();
+  $('#singlePaymentBox')?.classList.toggle('hidden',m==='MIXTO'||m==='TARJETA'||m==='TRANSFERENCIA BANCARIA');
+  $('#mixedPaymentBox')?.classList.toggle('hidden',m!=='MIXTO');
+  $('#bankAccount')?.classList.toggle('hidden',!(m==='TRANSFERENCIA BANCARIA'||m==='MIXTO'));
+  if($('#paymentReference')) $('#paymentReference').placeholder=(m==='TRANSFERENCIA BANCARIA'||m==='MIXTO')?'Referencia de transferencia':'Voucher / referencia opcional';
+  const note=$('#paymentPolicyNote');
+  if(note) note.textContent='Sin descuento automático. El descuento se aplica únicamente bajo solicitud.';
+  configureManualDiscountV1220();
+};
+function renderSettingsV1220(){
+  const p=policyV1003(),view=$('#settings'); if(!view)return;
+  view.innerHTML=`<div class="panel settings-policy-v1003">
+    <h3>Configuración comercial</h3>
+    <p>Los métodos de pago no aplican descuentos automáticos. Los descuentos se ingresan manualmente cuando corresponda.</p>
+    <div class="settings-grid-v1003">
+      <label><input id="cfgManualDiscountEnabledV1220" type="checkbox" ${p.manual_discount_enabled?'checked':''}> Permitir descuentos manuales</label>
+      <label>Descuento máximo permitido %<input id="cfgMaxManualDiscountV1220" type="number" min="0" max="100" step="0.01" value="${Number(p.max_manual_discount_percent||0)}"></label>
+      <label><input id="cfgRequireDiscountAuthorizationV1220" type="checkbox" ${p.require_discount_authorization?'checked':''}> Requerir Administrador o Supervisor</label>
+      <label><input id="cfgCardFeeIncluded" type="checkbox" ${p.card_fee_included?'checked':''}> Precio incluye costo de tarjeta</label>
+      <label><input id="cfgRequireTransferRef" type="checkbox" ${p.require_transfer_reference?'checked':''}> Transferencia requiere referencia</label>
+    </div>
+    <button id="saveCommercialPolicyV1220" class="primary">Guardar política comercial</button>
+  </div>
+  <div class="panel"><h3>Impresora térmica</h3><p>Para eliminar <b>about:blank</b>, fecha y número de página, desactive una vez “Encabezados y pies de página” en Más opciones del diálogo de Chrome.</p></div>
+  <div class="panel"><h3>Seguridad</h3><div class="toolbar"><button id="changePasswordBtn" class="primary" type="button">Cambiar mi contraseña</button></div></div>`;
+  $('#saveCommercialPolicyV1220').onclick=async()=>{
+    try{
+      await saveCommercialPolicyV1220({
+        manual_discount_enabled:$('#cfgManualDiscountEnabledV1220').checked,
+        max_manual_discount_percent:Number($('#cfgMaxManualDiscountV1220').value||0),
+        require_discount_authorization:$('#cfgRequireDiscountAuthorizationV1220').checked,
+        card_fee_included:$('#cfgCardFeeIncluded').checked,
+        require_transfer_reference:$('#cfgRequireTransferRef').checked
+      });
+      showToastV1043('Política comercial guardada para todos los equipos.','success');
+      renderCart();
+    }catch(error){showToastV1043(friendlySecurityErrorV132(error),'error')}
+  };
+  if(typeof bindPasswordButtonV132==='function')bindPasswordButtonV132();
+}
+
+let sessionDataLoadV1220=null;
+async function loadSystemAfterLoginV1220(){
+  if(sessionDataLoadV1220)return sessionDataLoadV1220;
+  sessionDataLoadV1220=(async()=>{
+    setStatus('Conectando...',false);
+    let lastError=null;
+    for(let attempt=1;attempt<=3;attempt++){
+      try{
+        await loadCommercialPolicyV1220();
+        await loadAll();
+        setStatus('Conectado',true);
+        return true;
+      }catch(error){
+        lastError=error;
+        await new Promise(resolve=>setTimeout(resolve,attempt*500));
+      }
+    }
+    console.error('No fue posible cargar el sistema después del ingreso:',lastError);
+    setStatus('Sin conexión',false);
+    showToastV1043('No fue posible cargar los datos. Use Actualizar para reintentar.','error');
+    return false;
+  })().finally(()=>{sessionDataLoadV1220=null});
+  return sessionDataLoadV1220;
+}
+const applySessionBaseV1220=applySessionV114;
+applySessionV114=function(user){
+  const result=applySessionBaseV1220(user);
+  setTimeout(loadSystemAfterLoginV1220,30);
+  return result;
+};
+
+function disableSearchHistoryV1220(){
+  ['productSearch','posSearch','barcodeSearch','customerSearch'].forEach(id=>{
+    const el=$('#'+id); if(!el)return;
+    el.setAttribute('autocomplete','off');
+    el.setAttribute('autocorrect','off');
+    el.setAttribute('spellcheck','false');
+    el.setAttribute('data-form-type','other');
+  });
+}
+disableSearchHistoryV1220();
+
+function validSaleV1220(s){return String(s?.status||'COMPLETED').toUpperCase()!=='CANCELLED'}
+const cashSessionSalesBaseV1220=cashSessionSalesV83;
+cashSessionSalesV83=function(sessionId){
+  const original=sales;
+  sales=(sales||[]).filter(validSaleV1220);
+  try{return cashSessionSalesBaseV1220(sessionId)}
+  finally{sales=original}
+};
+const cashSessionSalesDetailedBaseV1220=cashSessionSalesDetailedV85;
+cashSessionSalesDetailedV85=function(sessionId){
+  const original=sales;
+  sales=(sales||[]).filter(validSaleV1220);
+  try{return cashSessionSalesDetailedBaseV1220(sessionId)}
+  finally{sales=original}
+};
+const salesInRangeBaseV1220=salesInRangeV14;
+salesInRangeV14=function(start,end,unit='ALL'){
+  return salesInRangeBaseV1220(start,end,unit).filter(validSaleV1220);
+};
+function canVoidSaleV1220(){return ['ADMIN','SUPERVISOR'].includes(String(currentRole||'').toUpperCase())}
+window.openVoidSaleV1220=function(saleId){
+  if(!canVoidSaleV1220())return showToastV1043('Solo Administrador o Supervisor puede anular ventas.','warning');
+  const sale=(sales||[]).find(s=>String(s.id)===String(saleId));
+  if(!sale)return showToastV1043('No se encontró la venta.','error');
+  if(!validSaleV1220(sale))return showToastV1043('La venta ya está anulada.','warning');
+  const wrap=openSystemModalV131({
+    title:'Anular venta',
+    body:`<div class="void-sale-summary-v1220"><span>Factura</span><b>${escapeHtmlV6(sale.invoice_no||'')}</b><span>Total</span><b>${money(sale.total)}</b></div>
+      <label class="void-reason-label-v1220">Motivo de la anulación<textarea id="voidReasonV1220" rows="4" maxlength="300" placeholder="Explique por qué se anula esta venta"></textarea></label>
+      <p class="modal-note-v131">La factura se conservará como anulada y las cantidades regresarán al inventario.</p>`,
+    actions:[
+      {text:'Cancelar',className:'ghost',onClick:m=>m.classList.add('hidden')},
+      {text:'Confirmar anulación',className:'danger-v1220',onClick:async m=>{
+        const reason=(m.querySelector('#voidReasonV1220')?.value||'').trim();
+        if(reason.length<5)return showToastV1043('Ingrese un motivo válido para la anulación.','warning');
+        const button=m.querySelector('.danger-v1220'); if(button)button.disabled=true;
+        try{
+          const r=await sb.rpc('mm_void_sale',{p_sale_id:sale.id,p_actor_id:getCurrentActorIdV132(),p_reason:reason});
+          if(r.error)throw r.error;
+          m.classList.add('hidden');
+          await loadAll();
+          showToastV1043('Venta anulada e inventario restaurado.','success');
+        }catch(error){
+          if(button)button.disabled=false;
+          showToastV1043(error?.message||'No fue posible anular la venta.','error');
+        }
+      }}
+    ]
+  });
+  setTimeout(()=>wrap.querySelector('#voidReasonV1220')?.focus(),50);
+};
+const renderSalesBaseV1220=renderSales;
+renderSales=function(){
+  renderSalesBaseV1220();
+  const rows=[...document.querySelectorAll('#salesTable tr')].slice(1);
+  rows.forEach(row=>{
+    const invoice=row.querySelector('td:first-child')?.textContent?.trim();
+    const sale=(sales||[]).find(s=>String(s.invoice_no||'')===invoice);
+    const actions=row.querySelector('.sales-actions-v1214');
+    if(!sale||!actions||actions.querySelector('.void-sale-btn-v1220'))return;
+    if(validSaleV1220(sale)&&canVoidSaleV1220()){
+      actions.insertAdjacentHTML('beforeend',`<button type="button" class="void-sale-btn-v1220" onclick="openVoidSaleV1220('${sale.id}')">Anular</button>`);
+    }
+    if(!validSaleV1220(sale))row.classList.add('sale-cancelled-v1220');
+  });
+};
+const showViewBaseV1220=showView;
+showView=function(id,btn){
+  showViewBaseV1220(id,btn);
+  disableSearchHistoryV1220();
+  if(id==='settings')setTimeout(renderSettingsV1220,20);
+  if(id==='pos')setTimeout(()=>{renderPaymentDetails();renderCart()},30);
+  if(id==='sales')setTimeout(renderSales,40);
+};
+
+function applyVersionV1220(){
+  if(document.querySelector('title'))document.querySelector('title').textContent='MYM Comercial ERP V12.20';
+  if(document.querySelector('.brand span'))document.querySelector('.brand span').textContent='V12.20';
+  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.20');
+}
+setTimeout(applyVersionV1220,1300);
+setTimeout(()=>{
+  try{
+    if(localStorage.getItem('mm_session_user')&&!document.body.classList.contains('auth-locked')){
+      loadSystemAfterLoginV1220();
+    }
+  }catch(error){console.warn('Inicio automático V12.20:',error)}
+},1450);
