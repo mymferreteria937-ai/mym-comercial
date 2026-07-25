@@ -24,7 +24,7 @@ function applyRole(){document.querySelectorAll('.adminOnly').forEach(el=>el.clas
 function showView(id,btn){document.querySelectorAll('.view').forEach(v=>v.classList.remove('show'));document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));$('#'+id).classList.add('show');btn?.classList.add('active');$('#title').textContent=btn?btn.textContent:id;if(id==='dashboard')renderDashboard();if(id==='pos'){renderCategoryTabs();renderPOS();renderCart();setTimeout(()=>$('#posSearch').focus(),80)}if(id==='clients')renderClients();if(id==='products')renderProducts();if(id==='cash')renderCash();if(id==='users')renderUsers();if(id==='barcode')renderLabels();if(id==='promos')renderPromos();if(id==='profitability')renderProfitability();if(id==='sales')renderSales()}
 async function safeLoad(table, query='*', order='name'){const r=await sb.from(table).select(query).order(order,{ascending:false}); if(r.error){console.warn(table,r.error); return []} return r.data||[]}
 async function loadAll(){try{setStatus('Cargando...',false); products=await safeLoad('products','*, categories(name,code)','name'); categories=await safeLoad('categories','*','name'); sales=await safeLoad('sales','*','created_at'); saleItems=await safeLoad('sale_items','*','created_at'); clients=await safeLoad('customers','*','name'); users=await safeLoad('app_users','*','name'); cashBoxes=await safeLoad('cash_boxes','*','name'); cashSessions=await safeLoad('cash_sessions','*','opened_at'); fillCategorySelect(); fillCashSelects(); renderBankAccounts(); renderDashboard(); renderPOS(); renderCart(); renderProducts(); renderClients(); renderUsers(); renderCash(); renderProfitability(); renderSales(); renderPromos(); applyRole(); setStatus('Conectado',true)}catch(e){console.error(e); setStatus('Error',false); alert('Error cargando datos. Revisa RLS o schema_v5_addons.sql.')}}
-function profitOf(p){return Number(p.sale_price||0)-Number(p.purchase_price||0)} function realMargin(p){return Number(p.purchase_price)>0?(profitOf(p)/Number(p.purchase_price))*100:0} function potentialProfit(p){return Number(p.stock||0)*profitOf(p)} function productRows(){return products.filter(p=>Number(p.purchase_price)>0)}
+function profitOf(p){return Number(p.sale_price||0)-Number(p.purchase_price||0)} function realMargin(p){return Number(p.sale_price)>0?(profitOf(p)/Number(p.sale_price))*100:0} function potentialProfit(p){return Number(p.stock||0)*profitOf(p)} function productRows(){return products.filter(p=>Number(p.purchase_price)>0)}
 function renderDashboard(){const today=todayISO(); const salesToday=sales.filter(s=>(s.created_at||'').slice(0,10)===today); $('#kpiToday').textContent=money(salesToday.reduce((a,s)=>a+Number(s.total||0),0)); $('#kpiProfitToday').textContent=money(salesToday.reduce((a,s)=>a+Number(s.profit_total||0),0)); $('#kpiClients').textContent=clients.length; $('#kpiOpenCash').textContent=cashSessions.filter(s=>s.status==='OPEN').length; $('#kpiLowStock').textContent=products.filter(p=>Number(p.stock)<=Number(p.min_stock)).length; const rows=productRows(); renderProfitTable('#dashTopProfit',rows.slice().sort((a,b)=>profitOf(b)-profitOf(a)).slice(0,8)); renderProfitTable('#dashLowProfit',rows.slice().sort((a,b)=>profitOf(a)-profitOf(b)).slice(0,8)); renderTopClients(); renderPromos('#promoSuggestions')}
 function renderProfitTable(sel,rows){$(sel).innerHTML='<tr><th>Producto</th><th>Costo</th><th>Venta</th><th>Gana</th><th>Margen</th></tr>'+rows.map(p=>`<tr><td>${p.internal_code}<br><small>${p.name}</small></td><td>${money(p.purchase_price)}</td><td>${money(p.sale_price)}</td><td class="positive">${money(profitOf(p))}</td><td><span class="tag ${realMargin(p)<35?'red':'green'}">${realMargin(p).toFixed(1)}%</span></td></tr>`).join('')}
 function renderTopClients(){const map={}; sales.forEach(s=>{const k=s.customer_id||'eventual'; map[k]=(map[k]||0)+Number(s.total||0)}); const rows=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8); $('#dashTopClients').innerHTML='<tr><th>Cliente</th><th>Total</th></tr>'+rows.map(([id,total])=>`<tr><td>${id==='eventual'?'Cliente eventual':(clients.find(c=>c.id===id)?.name||id)}</td><td>${money(total)}</td></tr>`).join('')}
@@ -4551,7 +4551,7 @@ function ensureInventoryFormV1003(){
       </div></section>
       <section class="product-form-section-v1003"><h4>Precio e inventario</h4><div class="formGridV1003">
         <label>Costo unitario C$<input id="purchasePrice" type="number" step="0.01" placeholder="0.00"></label>
-        <label>Política de margen<select id="profitMargin"><option value="35">Margen 35%</option><option value="40">Margen 40%</option><option value="50">Margen 50%</option><option value="manual">Precio manual</option></select></label>
+        <label>Margen real deseado<select id="profitMargin"><option value="35">Margen real 35%</option><option value="40">Margen real 40%</option><option value="50">Margen real 50%</option><option value="manual">Editar precio de venta</option></select></label>
         <label>Precio de venta C$<input id="salePrice" type="number" step="0.01" placeholder="0.00"></label>
         <label>Stock actual<input id="stock" type="number" step="0.01" placeholder="0"></label>
         <label>Stock mínimo<input id="minStock" type="number" step="0.01" placeholder="0"></label>
@@ -4582,7 +4582,7 @@ function updateInventorySummaryV1003(){
   if($('#sumCostV1003')) $('#sumCostV1003').textContent=money(cost);
   if($('#sumSaleV1003')) $('#sumSaleV1003').textContent=money(sale);
   if($('#sumStockV1003')) $('#sumStockV1003').textContent=stock.toLocaleString('es-NI');
-  if($('#sumMarginV1003')) $('#sumMarginV1003').textContent=(cost>0?(((sale-cost)/cost)*100).toFixed(1):'0')+'%';
+  if($('#sumMarginV1003')) $('#sumMarginV1003').textContent=(sale>0?(((sale-cost)/sale)*100).toFixed(1):'0')+'%';
 }
 const resetProductFormBaseV1003Inventory=resetProductForm;
 resetProductForm=function(){
@@ -4788,15 +4788,21 @@ function ensureCustomMarginV1213(){
 function selectedMarginV1213(){
   const mode=document.querySelector('#profitMargin')?.value||'35';
   if(mode==='manual')return null;
-  if(mode==='custom')return Math.max(0,Number(document.querySelector('#customMarginV1213')?.value||0));
-  return Math.max(0,Number(mode||35));
+  if(mode==='custom')return Math.min(99.99,Math.max(0,Number(document.querySelector('#customMarginV1213')?.value||0)));
+  return Math.min(99.99,Math.max(0,Number(mode||35)));
+}
+function salePriceForGrossMarginV136(cost,margin){
+  const safeCost=Math.max(0,Number(cost||0));
+  const safeMargin=Math.min(99.99,Math.max(0,Number(margin||0)));
+  if(!safeCost)return 0;
+  return Math.ceil((safeCost/(1-safeMargin/100))*100)/100;
 }
 function calcSalePriceV1213(){
   const select=document.querySelector('#profitMargin'), saleEl=document.querySelector('#salePrice');
   if(!select||!saleEl||select.value==='manual')return;
   const cost=Math.max(0,Number(document.querySelector('#purchasePrice')?.value||0));
   const margin=selectedMarginV1213()||0;
-  saleEl.value=(cost*(1+margin/100)).toFixed(2);
+  saleEl.value=salePriceForGrossMarginV136(cost,margin).toFixed(2);
 }
 calcSalePrice=calcSalePriceV1213;
 
@@ -4807,10 +4813,11 @@ saveProduct=async function(e){
   if(!select)return saveProductBaseV1213(e);
   const mode=select.value, manual=mode==='manual', margin=manual?0:selectedMarginV1213();
   const cost=Math.max(0,Number(document.querySelector('#purchasePrice')?.value||0));
-  const sale=manual?Number(document.querySelector('#salePrice')?.value||0):Number((cost*(1+margin/100)).toFixed(2));
-  if(manual && sale<=0){alert('Ingresá un precio manual mayor que cero.');return}
+  const sale=manual?Number(document.querySelector('#salePrice')?.value||0):salePriceForGrossMarginV136(cost,margin);
+  if(manual && sale<=cost){alert('El precio de venta debe ser mayor que el costo para generar ganancia.');return}
+  const effectiveMargin=sale>0?Number((((sale-cost)/sale)*100).toFixed(2)):0;
   const categoryId=document.querySelector('#categorySelect')?.value||null;
-  const payload={supplier_code:document.querySelector('#supplierCode')?.value||null,name:document.querySelector('#productName')?.value,category_id:categoryId,brand:document.querySelector('#brand')?.value||null,unit_type:document.querySelector('#unitType')?.value||'UND',purchase_price:cost,profit_margin:margin,allow_manual_price:manual,sale_price:sale,public_price:sale,stock:Number(document.querySelector('#stock')?.value||0),min_stock:Number(document.querySelector('#minStock')?.value||0),max_stock:Number(document.querySelector('#maxStock')?.value||0),location:document.querySelector('#location')?.value||null,last_cost_update:new Date().toISOString(),business_unit_id:document.querySelector('#productBusinessUnit')?.value||null,sale_type:document.querySelector('#saleType')?.value||'UNIDAD',allows_decimal:typeof isDecimalUnitV102==='function'?isDecimalUnitV102(document.querySelector('#unitType')?.value):false,manufacturer_code:document.querySelector('#manufacturerCode')?.value||null,aliases:document.querySelector('#productAlias')?.value||null};
+  const payload={supplier_code:document.querySelector('#supplierCode')?.value||null,name:document.querySelector('#productName')?.value,category_id:categoryId,brand:document.querySelector('#brand')?.value||null,unit_type:document.querySelector('#unitType')?.value||'UND',purchase_price:cost,profit_margin:manual?effectiveMargin:margin,allow_manual_price:manual,sale_price:sale,public_price:sale,stock:Number(document.querySelector('#stock')?.value||0),min_stock:Number(document.querySelector('#minStock')?.value||0),max_stock:Number(document.querySelector('#maxStock')?.value||0),location:document.querySelector('#location')?.value||null,last_cost_update:new Date().toISOString(),business_unit_id:document.querySelector('#productBusinessUnit')?.value||null,sale_type:document.querySelector('#saleType')?.value||'UNIDAD',allows_decimal:typeof isDecimalUnitV102==='function'?isDecimalUnitV102(document.querySelector('#unitType')?.value):false,manufacturer_code:document.querySelector('#manufacturerCode')?.value||null,aliases:document.querySelector('#productAlias')?.value||null};
   let r; const id=document.querySelector('#productId')?.value;
   if(id)r=await sb.from('products').update(payload).eq('id',id);
   else{const code=typeof generateProductCodeV106==='function'?await generateProductCodeV106(categoryId):('MM-GEN-'+Date.now());r=await sb.from('products').insert({...payload,internal_code:code,barcode:code,status:'ACTIVE'});}
@@ -5531,3 +5538,47 @@ function applyUnifiedVersionV136(){
 }
 applyUnifiedVersionV136();
 window.addEventListener('load',applyUnifiedVersionV136,{once:true});
+
+/* =========================================================
+   V13.6 - Prevención de productos duplicados
+   ========================================================= */
+function normalizeProductIdentityV136(value){
+  return String(value||'').trim().toLocaleLowerCase('es-NI').replace(/\s+/g,' ');
+}
+function duplicateProductV136(){
+  const currentId=String($('#productId')?.value||'');
+  const unitId=String($('#productBusinessUnit')?.value||'');
+  const supplierCode=normalizeProductIdentityV136($('#supplierCode')?.value);
+  const manufacturerCode=normalizeProductIdentityV136($('#manufacturerCode')?.value);
+  const name=normalizeProductIdentityV136($('#productName')?.value);
+  const brand=normalizeProductIdentityV136($('#brand')?.value);
+  return (products||[]).find(product=>{
+    if(String(product.id)===currentId)return false;
+    if(String(product.business_unit_id||'')!==unitId)return false;
+    const sameSupplier=supplierCode&&normalizeProductIdentityV136(product.supplier_code)===supplierCode;
+    const sameManufacturer=manufacturerCode&&normalizeProductIdentityV136(product.manufacturer_code)===manufacturerCode;
+    const sameName=name&&normalizeProductIdentityV136(product.name)===name&&normalizeProductIdentityV136(product.brand)===brand;
+    return sameSupplier||sameManufacturer||sameName;
+  })||null;
+}
+const saveProductBaseV136=saveProduct;
+saveProduct=async function(e){
+  e.preventDefault();
+  const duplicate=duplicateProductV136();
+  if(duplicate){
+    const code=duplicate.internal_code||duplicate.supplier_code||'sin código';
+    alert(`Este producto ya existe (${code}): ${duplicate.name}. Editá el registro existente para actualizar precio, costo o stock.`);
+    return;
+  }
+  try{
+    await saveProductBaseV136({preventDefault(){}});
+  }catch(error){
+    const message=String(error?.message||error||'');
+    if(message.includes('PRODUCTO_DUPLICADO')){
+      alert(message.replace(/^.*PRODUCTO_DUPLICADO:\s*/,''));
+      return;
+    }
+    throw error;
+  }
+};
+if($('#productForm'))$('#productForm').onsubmit=saveProduct;

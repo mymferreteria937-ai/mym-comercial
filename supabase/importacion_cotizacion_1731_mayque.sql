@@ -97,8 +97,8 @@ begin
         'FER-'||r.supplier_code,r.supplier_code,r.supplier_code,'FERRETERIA LA PRINCIPAL',
         r.name,v_category_id,
         case when r.name like '%AMANCO%' then 'AMANCO' when r.name like '%KNAUF%' then 'KNAUF' else 'SIN MARCA' end,
-        'UND','UNIDAD',false,r.unit_cost,round(r.unit_cost*1.35,2),
-        round(r.unit_cost*1.35,2),35,false,r.quantity,0,0,
+        'UND','UNIDAD',false,r.unit_cost,ceil((r.unit_cost/0.65)*100)/100,
+        ceil((r.unit_cost/0.65)*100)/100,35,false,r.quantity,0,0,
         v_unit_id,'ACTIVE',now()
       ) returning id into v_product_id;
     else
@@ -107,8 +107,8 @@ begin
           supplier_name='FERRETERIA LA PRINCIPAL',
           category_id=v_category_id,
           purchase_price=r.unit_cost,
-          public_price=round(r.unit_cost*1.35,2),
-          sale_price=round(r.unit_cost*1.35,2),
+          public_price=ceil((r.unit_cost/0.65)*100)/100,
+          sale_price=ceil((r.unit_cost/0.65)*100)/100,
           profit_margin=35,
           allow_manual_price=false,
           stock=coalesce(stock,0)+r.quantity,

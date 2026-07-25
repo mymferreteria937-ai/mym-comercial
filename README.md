@@ -21,6 +21,8 @@ No configure `app` como Root Directory, porque eso excluiría el sitio web públ
 - Ventas y ganancia diaria.
 - Historial filtrable por fecha.
 - Reportes y gráficos de comportamiento.
+- Precios calculados con margen real de 35%, 40%, 50% o porcentaje personalizado.
+- Precio de venta manual con cálculo del margen resultante.
 - Política de descuento manual persistente.
 - Anulación auditable de ventas.
 - Conexión automática después del ingreso.
@@ -30,3 +32,6 @@ No configure `app` como Root Directory, porque eso excluiría el sitio web públ
 Ejecute una sola vez antes de publicar:
 
 `supabase/schema_v13_6_unificacion.sql`
+
+La migración convierte los precios automáticos existentes a margen real sobre
+la venta. Los productos marcados con precio manual no se modifican.

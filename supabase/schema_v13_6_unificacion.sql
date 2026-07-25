@@ -204,4 +204,112 @@ grant execute on function public.mm_get_commercial_policy() to anon,authenticate
 grant execute on function public.mm_save_commercial_policy(uuid,boolean,numeric,boolean,boolean,boolean) to anon,authenticated;
 grant execute on function public.mm_void_sale(uuid,uuid,text) to anon,authenticated;
 
+-- Evita crear el mismo producto más de una vez dentro de la misma unidad.
+create or replace function public.mm_normalize_product_identity(p_value text)
+returns text
+language sql
+immutable
+as $$
+  select lower(regexp_replace(trim(coalesce(p_value,'')), '\s+', ' ', 'g'));
+$$;
+
+create or replace function public.mm_prevent_duplicate_product()
+returns trigger
+language plpgsql
+set search_path=public
+as $$
+declare
+  v_existing record;
+begin
+  -- Permite actualizar precio, costo o stock de duplicados históricos mientras
+  -- no se modifique su identidad. Los nuevos duplicados siempre se bloquean.
+  if tg_op='UPDATE'
+     and new.business_unit_id is not distinct from old.business_unit_id
+     and public.mm_normalize_product_identity(new.supplier_code)
+         = public.mm_normalize_product_identity(old.supplier_code)
+     and public.mm_normalize_product_identity(new.manufacturer_code)
+         = public.mm_normalize_product_identity(old.manufacturer_code)
+     and public.mm_normalize_product_identity(new.barcode)
+         = public.mm_normalize_product_identity(old.barcode)
+     and public.mm_normalize_product_identity(new.name)
+         = public.mm_normalize_product_identity(old.name)
+     and public.mm_normalize_product_identity(new.brand)
+         = public.mm_normalize_product_identity(old.brand)
+  then
+    return new;
+  end if;
+
+  select p.id,p.internal_code,p.name
+  into v_existing
+  from public.products p
+  where p.id<>coalesce(new.id,'00000000-0000-0000-0000-000000000000'::uuid)
+    and p.business_unit_id is not distinct from new.business_unit_id
+    and (
+      (
+        public.mm_normalize_product_identity(new.supplier_code)<>''
+        and public.mm_normalize_product_identity(p.supplier_code)
+            = public.mm_normalize_product_identity(new.supplier_code)
+      )
+      or (
+        public.mm_normalize_product_identity(new.manufacturer_code)<>''
+        and public.mm_normalize_product_identity(p.manufacturer_code)
+            = public.mm_normalize_product_identity(new.manufacturer_code)
+      )
+      or (
+        public.mm_normalize_product_identity(new.barcode)<>''
+        and public.mm_normalize_product_identity(p.barcode)
+            = public.mm_normalize_product_identity(new.barcode)
+      )
+      or (
+        public.mm_normalize_product_identity(new.name)<>''
+        and public.mm_normalize_product_identity(p.name)
+            = public.mm_normalize_product_identity(new.name)
+        and public.mm_normalize_product_identity(p.brand)
+            = public.mm_normalize_product_identity(new.brand)
+      )
+    )
+  order by p.created_at
+  limit 1;
+
+  if found then
+    raise exception
+      'PRODUCTO_DUPLICADO: Ya existe % (%) en esta unidad. Edite el registro existente.',
+      v_existing.name,v_existing.internal_code
+      using errcode='23505';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_mm_prevent_duplicate_product on public.products;
+create trigger trg_mm_prevent_duplicate_product
+before insert or update of
+  business_unit_id,supplier_code,manufacturer_code,barcode,name,brand
+on public.products
+for each row execute function public.mm_prevent_duplicate_product();
+
+-- Convierte las políticas existentes a margen real sobre venta.
+-- Los productos con precio manual no se modifican.
+update public.products
+set sale_price =
+      ceil(
+        (
+          purchase_price /
+          (1 - (profit_margin / 100))
+        ) * 100
+      ) / 100,
+    public_price =
+      ceil(
+        (
+          purchase_price /
+          (1 - (profit_margin / 100))
+        ) * 100
+      ) / 100,
+    updated_at = now()
+where coalesce(allow_manual_price,false)=false
+  and coalesce(purchase_price,0)>0
+  and coalesce(profit_margin,0)>0
+  and profit_margin<100;
+
 commit;
