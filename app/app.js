@@ -4529,7 +4529,7 @@ function ensureInventoryFormV1003(){
         <h3 id="productEditorTitleV1003">Nuevo producto</h3>
         <p>Ficha completa de inventario, precios, unidades, códigos, proveedor y ubicación.</p>
       </div>
-      <div class="editor-status-v1003"><span class="version-pill">V13.6</span><button type="button" id="cancelProductTopV1003" class="ghost">Cerrar</button></div>
+      <div class="editor-status-v1003"><span class="version-pill">V13.8</span><button type="button" id="cancelProductTopV1003" class="ghost">Cerrar</button></div>
     </div>
     <input type="hidden" id="productId">
     <div id="productCodePreviewV1003" class="product-code-preview-v1003 hidden"></div>
@@ -5528,7 +5528,7 @@ function applyVersionV1221(){
   if(document.querySelector('.brand span'))document.querySelector('.brand span').textContent='V12.21';
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.21');
 }
-const MYM_APP_VERSION='V13.6';
+const MYM_APP_VERSION='V13.8';
 function applyUnifiedVersionV136(){
   if(document.querySelector('title'))document.querySelector('title').textContent=`MYM Comercial ERP ${MYM_APP_VERSION}`;
   const brandName=document.querySelector('.brand b');
@@ -5540,7 +5540,7 @@ applyUnifiedVersionV136();
 window.addEventListener('load',applyUnifiedVersionV136,{once:true});
 
 /* =========================================================
-   V13.6 - Prevención de productos duplicados
+   V13.8 - Margen real y prevención de productos duplicados
    ========================================================= */
 function normalizeProductIdentityV136(value){
   return String(value||'').trim().toLocaleLowerCase('es-NI').replace(/\s+/g,' ');

@@ -1,6 +1,6 @@
-# MYM Comercial ERP V13.6
+# MYM Comercial ERP V13.8
 
-Entrega consolidada de MYM Comercial ERP. La aplicación, módulos, formularios y documentación operativa utilizan una sola versión: **V13.6**.
+Entrega consolidada de MYM Comercial ERP. La aplicación, módulos, formularios y documentación operativa utilizan una sola versión: **V13.8**.
 
 ## Publicación en Vercel
 
@@ -31,7 +31,7 @@ No configure `app` como Root Directory, porque eso excluiría el sitio web públ
 
 Ejecute una sola vez antes de publicar:
 
-`supabase/schema_v13_6_unificacion.sql`
+`supabase/schema_v13_8_unificacion.sql`
 
 La migración convierte los precios automáticos existentes a margen real sobre
 la venta. Los productos marcados con precio manual no se modifican.
