@@ -4529,7 +4529,7 @@ function ensureInventoryFormV1003(){
         <h3 id="productEditorTitleV1003">Nuevo producto</h3>
         <p>Ficha completa de inventario, precios, unidades, códigos, proveedor y ubicación.</p>
       </div>
-      <div class="editor-status-v1003"><span class="version-pill">V13.8</span><button type="button" id="cancelProductTopV1003" class="ghost">Cerrar</button></div>
+      <div class="editor-status-v1003"><span class="version-pill">V13.9</span><button type="button" id="cancelProductTopV1003" class="ghost">Cerrar</button></div>
     </div>
     <input type="hidden" id="productId">
     <div id="productCodePreviewV1003" class="product-code-preview-v1003 hidden"></div>
@@ -5528,7 +5528,7 @@ function applyVersionV1221(){
   if(document.querySelector('.brand span'))document.querySelector('.brand span').textContent='V12.21';
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.21');
 }
-const MYM_APP_VERSION='V13.8';
+const MYM_APP_VERSION='V13.9';
 function applyUnifiedVersionV136(){
   if(document.querySelector('title'))document.querySelector('title').textContent=`MYM Comercial ERP ${MYM_APP_VERSION}`;
   const brandName=document.querySelector('.brand b');
@@ -5582,3 +5582,162 @@ saveProduct=async function(e){
   }
 };
 if($('#productForm'))$('#productForm').onsubmit=saveProduct;
+
+/* =========================================================
+   V13.9 - Eliminación segura de productos duplicados
+   ========================================================= */
+function productIsActiveV139(product){
+  return String(product?.status||'ACTIVE').toUpperCase()!=='INACTIVE';
+}
+function ensureDeleteProductModalV139(){
+  let modal=$('#deleteProductModalV139');
+  if(modal)return modal;
+  modal=document.createElement('div');
+  modal.id='deleteProductModalV139';
+  modal.className='modal hidden';
+  modal.innerHTML=`
+    <div class="modalCard delete-product-card-v139">
+      <div class="modal-title-row-v139">
+        <div><span class="editor-kicker-v1003">Control de inventario</span><h3>Eliminar producto</h3></div>
+        <button type="button" class="ghost" id="closeDeleteProductV139">Cerrar</button>
+      </div>
+      <div id="deleteProductSummaryV139" class="delete-product-summary-v139"></div>
+      <div id="deleteProductWarningV139" class="delete-product-warning-v139">
+        Esta acción solo elimina productos sin ventas, importaciones ni movimientos. El historial comercial nunca será borrado.
+      </div>
+      <label class="delete-product-reason-v139">Motivo
+        <textarea id="deleteProductReasonV139" rows="3" maxlength="240" placeholder="Ej. Producto creado por duplicado"></textarea>
+      </label>
+      <p id="deleteProductMessageV139" class="delete-product-message-v139"></p>
+      <div class="formActions">
+        <button type="button" class="ghost" id="cancelDeleteProductV139">Cancelar</button>
+        <button type="button" class="danger-v1220" id="confirmDeleteProductV139">Eliminar definitivamente</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.classList.add('hidden');
+  $('#closeDeleteProductV139').onclick=close;
+  $('#cancelDeleteProductV139').onclick=close;
+  modal.addEventListener('click',event=>{if(event.target===modal)close();});
+  $('#confirmDeleteProductV139').onclick=executeDeleteProductV139;
+  return modal;
+}
+function ensureDeleteProductButtonV139(){
+  ensureInventoryFormV1003();
+  const actions=$('#productForm .sticky-actions-v1003');
+  if(!actions||$('#deleteProductV139'))return;
+  const button=document.createElement('button');
+  button.type='button';
+  button.id='deleteProductV139';
+  button.className='danger-v1220 delete-product-v139 hidden';
+  button.textContent='Eliminar producto';
+  button.onclick=openDeleteProductV139;
+  actions.insertBefore(button,actions.firstChild);
+}
+function toggleDeleteProductButtonV139(productId){
+  ensureDeleteProductButtonV139();
+  const button=$('#deleteProductV139');
+  if(button)button.classList.toggle('hidden',!productId||!isAdmin());
+}
+function openDeleteProductV139(){
+  if(!guardAdmin())return;
+  const id=$('#productId')?.value;
+  const product=(products||[]).find(item=>String(item.id)===String(id));
+  if(!product)return alert('Seleccione primero el producto que desea eliminar.');
+  const modal=ensureDeleteProductModalV139();
+  modal.dataset.productId=String(product.id);
+  modal.dataset.mode='DELETE';
+  $('#deleteProductSummaryV139').innerHTML=`
+    <div><small>Producto</small><b>${escapeHtmlV6(product.name||'Sin nombre')}</b></div>
+    <div><small>Código</small><b>${escapeHtmlV6(product.internal_code||product.supplier_code||'Sin código')}</b></div>
+    <div><small>Stock actual</small><b>${Number(product.stock||0).toLocaleString('es-NI')}</b></div>`;
+  $('#deleteProductWarningV139').textContent='Esta acción solo elimina productos sin ventas, importaciones ni movimientos. El historial comercial nunca será borrado.';
+  $('#deleteProductReasonV139').value='';
+  $('#deleteProductMessageV139').textContent='';
+  const button=$('#confirmDeleteProductV139');
+  button.textContent='Eliminar definitivamente';
+  button.className='danger-v1220';
+  modal.classList.remove('hidden');
+  setTimeout(()=>$('#deleteProductReasonV139')?.focus(),50);
+}
+async function executeDeleteProductV139(){
+  const modal=$('#deleteProductModalV139');
+  const id=modal?.dataset.productId;
+  const mode=modal?.dataset.mode||'DELETE';
+  const reason=String($('#deleteProductReasonV139')?.value||'').trim();
+  const message=$('#deleteProductMessageV139');
+  const button=$('#confirmDeleteProductV139');
+  if(reason.length<5){
+    message.textContent='Escriba un motivo de al menos 5 caracteres.';
+    return;
+  }
+  if(!id||!getCurrentActorIdV132()){
+    message.textContent='No fue posible identificar el producto o el administrador.';
+    return;
+  }
+  button.disabled=true;
+  button.textContent=mode==='DEACTIVATE'?'Desactivando...':'Validando...';
+  try{
+    const response=await sb.rpc('mm_delete_inventory_product',{
+      p_product_id:id,
+      p_actor_id:getCurrentActorIdV132(),
+      p_reason:reason,
+      p_mode:mode
+    });
+    if(response.error)throw response.error;
+    const result=response.data||{};
+    if(result.ok===false&&result.blocked){
+      modal.dataset.mode='DEACTIVATE';
+      $('#deleteProductWarningV139').innerHTML=`El producto tiene historial protegido: <b>${Number(result.sale_lines||0)}</b> línea(s) de venta, <b>${Number(result.movements||0)}</b> movimiento(s) y <b>${Number(result.imports||0)}</b> importación(es). Puede desactivarlo para ocultarlo del inventario sin perder esos datos.`;
+      message.textContent=result.message||'No se puede eliminar definitivamente.';
+      button.textContent='Desactivar producto';
+      button.className='primary';
+      return;
+    }
+    if(result.ok===false)throw new Error(result.message||'No se pudo completar la operación.');
+    products=(products||[]).filter(item=>String(item.id)!==String(id));
+    modal.classList.add('hidden');
+    resetProductForm();
+    renderProducts();
+    renderPOS();
+    renderDashboard();
+    showToastV1043(mode==='DEACTIVATE'?'Producto desactivado sin borrar su historial.':'Producto eliminado correctamente.');
+  }catch(error){
+    console.error('Eliminar producto V13.9:',error);
+    const raw=String(error?.message||'');
+    message.textContent=raw.includes('mm_delete_inventory_product')
+      ?'Falta ejecutar schema_v13_9_eliminar_productos.sql en Supabase.'
+      :(raw||'No fue posible completar la operación.');
+  }finally{
+    button.disabled=false;
+    if(!modal?.classList.contains('hidden')){
+      button.textContent=modal.dataset.mode==='DEACTIVATE'?'Desactivar producto':'Eliminar definitivamente';
+    }
+  }
+}
+const editProductBaseV139=window.editProduct;
+window.editProduct=function(id){
+  editProductBaseV139(id);
+  toggleDeleteProductButtonV139(id);
+};
+const resetProductFormBaseV139=resetProductForm;
+resetProductForm=function(){
+  resetProductFormBaseV139();
+  toggleDeleteProductButtonV139(null);
+};
+const loadAllBaseV139=loadAll;
+loadAll=async function(){
+  await loadAllBaseV139();
+  const activeProducts=(products||[]).filter(productIsActiveV139);
+  if(activeProducts.length!==(products||[]).length){
+    products=activeProducts;
+    renderDashboard();
+    renderPOS();
+    renderProducts();
+    renderProfitability();
+  }
+};
+setTimeout(()=>{
+  ensureDeleteProductButtonV139();
+  applyUnifiedVersionV136();
+},800);
