@@ -2875,8 +2875,10 @@ closeCash=async function(){
   const diffTotal=diffCash+diffCard+diffTransfer;
   if((diffTotal!==0 || diffUsd!==0) && !($('#closingNote')?.value||'').trim()) return showToastV1043('Hay diferencia. Debes registrar una observación antes de cerrar caja.','warning');
   const payload={status:'CLOSED',closed_at:new Date().toISOString(),expected_cash:expectedCash,expected_total:expectedTotal,counted_cash:countedCash,counted_card:countedCard,counted_transfer:countedTransfer,cash_expenses:expenses,counted_total:countedTotal,difference_amount:diffTotal,opening_cash_nio:Number(session.opening_cash_nio||session.opening_amount||0),opening_cash_usd:Number(session.opening_cash_usd||0),expected_cash_nio:expectedCash,expected_cash_usd:expectedCashUsd,counted_cash_nio:countedCash,counted_cash_usd:countedCashUsd,difference_cash_nio:diffCash,difference_cash_usd:diffUsd,closing_note:$('#closingNote')?.value||null};
-  const r=await sb.from('cash_sessions').update(payload).eq('id',id);
+  const r=await sb.from('cash_sessions').update(payload).eq('id',id).select('id,status').single();
   if(r.error) return showToastV1043(r.error.message,'error');
+  if(!r.data || String(r.data.status||'').toUpperCase()!=='CLOSED') return showToastV1043('La base de datos no confirmó el cierre. La caja continúa abierta.','error');
+  if(localStorage.getItem('mm_cash_session')===String(id)) localStorage.removeItem('mm_cash_session');
   showToastV1043('Caja cerrada con Mesa de Cambio incluida en el arqueo.','success');
   await loadAll();
 };
@@ -5528,7 +5530,7 @@ function applyVersionV1221(){
   if(document.querySelector('.brand span'))document.querySelector('.brand span').textContent='V12.21';
   document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V12.21');
 }
-const MYM_APP_VERSION='V13.9';
+const MYM_APP_VERSION='V13.10';
 function applyUnifiedVersionV136(){
   if(document.querySelector('title'))document.querySelector('title').textContent=`MYM Comercial ERP ${MYM_APP_VERSION}`;
   const brandName=document.querySelector('.brand b');
@@ -5595,6 +5597,8 @@ function ensureDeleteProductModalV139(){
   modal=document.createElement('div');
   modal.id='deleteProductModalV139';
   modal.className='modal hidden';
+  modal.style.setProperty('z-index','2147483647','important');
+  modal.style.setProperty('position','fixed','important');
   modal.innerHTML=`
     <div class="modalCard delete-product-card-v139">
       <div class="modal-title-row-v139">
@@ -5629,9 +5633,21 @@ function ensureDeleteProductButtonV139(){
   const button=document.createElement('button');
   button.type='button';
   button.id='deleteProductV139';
-  button.className='danger-v1220 delete-product-v139 hidden';
+  button.className='delete-product-v139 hidden';
   button.textContent='Eliminar producto';
-  button.onclick=openDeleteProductV139;
+  button.style.setProperty('background','linear-gradient(135deg,#f97316,#ea580c)','important');
+  button.style.color='#ffffff';
+  button.style.setProperty('border-color','#fb923c','important');
+  button.addEventListener('click',event=>{
+    event.preventDefault();
+    event.stopPropagation();
+    try{
+      openDeleteProductV139();
+    }catch(error){
+      console.error('Abrir eliminación V13.9:',error);
+      alert(`No fue posible abrir la eliminación: ${error?.message||error}`);
+    }
+  });
   actions.insertBefore(button,actions.firstChild);
 }
 function toggleDeleteProductButtonV139(productId){
@@ -5645,6 +5661,8 @@ function openDeleteProductV139(){
   const product=(products||[]).find(item=>String(item.id)===String(id));
   if(!product)return alert('Seleccione primero el producto que desea eliminar.');
   const modal=ensureDeleteProductModalV139();
+  modal.style.setProperty('z-index','2147483647','important');
+  modal.style.setProperty('display','grid','important');
   modal.dataset.productId=String(product.id);
   modal.dataset.mode='DELETE';
   $('#deleteProductSummaryV139').innerHTML=`
@@ -5656,7 +5674,10 @@ function openDeleteProductV139(){
   $('#deleteProductMessageV139').textContent='';
   const button=$('#confirmDeleteProductV139');
   button.textContent='Eliminar definitivamente';
-  button.className='danger-v1220';
+  button.className='delete-confirm-v139';
+  button.style.setProperty('background','linear-gradient(135deg,#f97316,#ea580c)','important');
+  button.style.setProperty('color','#ffffff','important');
+  button.style.setProperty('border-color','#fb923c','important');
   modal.classList.remove('hidden');
   setTimeout(()=>$('#deleteProductReasonV139')?.focus(),50);
 }
@@ -5741,3 +5762,354 @@ setTimeout(()=>{
   ensureDeleteProductButtonV139();
   applyUnifiedVersionV136();
 },800);
+
+/* =========================================================
+   V13.9.2 - Guardado único y refresco inmediato del producto
+   Corrige nombres antiguos conservados en clean_name.
+   ========================================================= */
+async function saveProductV1392(e){
+  e?.preventDefault?.();
+  if(!guardAdmin())return;
+  const id=String($('#productId')?.value||'');
+  const existing=(products||[]).find(product=>String(product.id)===id)||null;
+  const name=String($('#productName')?.value||'').replace(/\s+/g,' ').trim();
+  if(!name)return alert('Escriba el nombre comercial del producto.');
+  const duplicate=duplicateProductV136();
+  if(duplicate){
+    const code=duplicate.internal_code||duplicate.supplier_code||'sin código';
+    return alert(`Este producto ya existe (${code}): ${duplicate.name}. Edite el registro existente.`);
+  }
+  const mode=$('#profitMargin')?.value||'35';
+  const manual=mode==='manual';
+  const margin=manual?0:(typeof selectedMarginV1213==='function'?selectedMarginV1213():Number(mode||35));
+  const cost=Math.max(0,Number($('#purchasePrice')?.value||0));
+  const sale=manual
+    ?Math.max(0,Number($('#salePrice')?.value||0))
+    :(typeof salePriceForGrossMarginV136==='function'
+      ?salePriceForGrossMarginV136(cost,margin)
+      :Math.ceil(cost*(1+margin/100)));
+  if(manual&&sale<=cost)return alert('El precio de venta debe ser mayor que el costo.');
+  const effectiveMargin=sale>0?Number((((sale-cost)/sale)*100).toFixed(2)):0;
+  const payload={
+    name,
+    supplier_name:String($('#supplierName')?.value||'').trim()||null,
+    supplier_code:String($('#supplierCode')?.value||'').trim()||null,
+    manufacturer_code:String($('#manufacturerCode')?.value||'').trim()||null,
+    aliases:String($('#productAlias')?.value||'').trim()||null,
+    category_id:$('#categorySelect')?.value||null,
+    brand:String($('#brand')?.value||'').trim()||null,
+    unit_type:$('#unitType')?.value||'UND',
+    purchase_price:cost,
+    profit_margin:manual?effectiveMargin:margin,
+    allow_manual_price:manual,
+    sale_price:sale,
+    public_price:sale,
+    stock:Number($('#stock')?.value||0),
+    min_stock:Number($('#minStock')?.value||0),
+    max_stock:Number($('#maxStock')?.value||0),
+    location:String($('#location')?.value||'').trim()||null,
+    business_unit_id:$('#productBusinessUnit')?.value||existing?.business_unit_id||null,
+    sale_type:$('#saleType')?.value||'UNIDAD',
+    allows_decimal:typeof isDecimalUnitV102==='function'?isDecimalUnitV102($('#unitType')?.value):false,
+    last_cost_update:new Date().toISOString()
+  };
+  /* Algunas instalaciones antiguas conservan clean_name y la lista lo
+     prioriza. Si existe, lo sincronizamos con el nombre comercial. */
+  if(existing&&Object.prototype.hasOwnProperty.call(existing,'clean_name')){
+    payload.clean_name=name;
+  }
+  let response;
+  if(id){
+    response=await sb.from('products').update(payload).eq('id',id).select('*').single();
+  }else{
+    const categoryId=payload.category_id;
+    const code=typeof generateProductCodeV106==='function'
+      ?await generateProductCodeV106(categoryId)
+      :('MM-GEN-'+Date.now());
+    response=await sb.from('products').insert({
+      ...payload,internal_code:code,barcode:code,status:'ACTIVE'
+    }).select('*').single();
+  }
+  if(response.error){
+    const message=String(response.error.message||'');
+    if(message.includes('clean_name')){
+      delete payload.clean_name;
+      response=id
+        ?await sb.from('products').update(payload).eq('id',id).select('*').single()
+        :response;
+    }
+  }
+  if(response.error)return alert('No se pudo guardar el producto: '+response.error.message);
+  const saved=response.data;
+  if(saved){
+    const category=(categories||[]).find(item=>String(item.id)===String(saved.category_id));
+    const hydrated={...existing,...saved,categories:category?{name:category.name,code:category.code}:existing?.categories};
+    const index=(products||[]).findIndex(item=>String(item.id)===String(saved.id));
+    if(index>=0)products[index]=hydrated;
+    else products.unshift(hydrated);
+    selectedInventoryProductV93=String(saved.id);
+  }
+  resetProductForm();
+  await loadAll();
+  selectedInventoryProductV93=String(saved?.id||id);
+  renderProducts();
+  renderPOS();
+  showToastV1043(id?'Producto actualizado correctamente.':'Producto creado correctamente.','success');
+}
+saveProduct=saveProductV1392;
+if($('#productForm'))$('#productForm').onsubmit=saveProductV1392;
+setTimeout(()=>{if($('#productForm'))$('#productForm').onsubmit=saveProductV1392;},900);
+
+/* =========================================================
+   V13.10 - Rentabilidad mensual/quincenal y caja consistente
+   ========================================================= */
+function localDateInputV1310(date){
+  const d=new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function applyReportPeriodPresetV1310(value){
+  const preset=value||$('#reportPeriodPreset')?.value||'THIS_MONTH';
+  if(preset==='CUSTOM')return;
+  const now=new Date();
+  let start=new Date(now.getFullYear(),now.getMonth(),1);
+  let end=new Date(now.getFullYear(),now.getMonth()+1,0);
+  if(preset==='CURRENT_FORTNIGHT'){
+    if(now.getDate()<=15){
+      start=new Date(now.getFullYear(),now.getMonth(),1);
+      end=new Date(now.getFullYear(),now.getMonth(),15);
+    }else{
+      start=new Date(now.getFullYear(),now.getMonth(),16);
+      end=new Date(now.getFullYear(),now.getMonth()+1,0);
+    }
+  }
+  if(preset==='FIRST_HALF'){
+    start=new Date(now.getFullYear(),now.getMonth(),1);
+    end=new Date(now.getFullYear(),now.getMonth(),15);
+  }
+  if(preset==='SECOND_HALF'){
+    start=new Date(now.getFullYear(),now.getMonth(),16);
+    end=new Date(now.getFullYear(),now.getMonth()+1,0);
+  }
+  if(preset==='THIS_MONTH'){
+    start=new Date(now.getFullYear(),now.getMonth(),1);
+    end=now;
+  }
+  if($('#reportStart'))$('#reportStart').value=localDateInputV1310(start);
+  if($('#reportEnd'))$('#reportEnd').value=localDateInputV1310(end);
+}
+function validSaleV1310(s){
+  return String(s?.status||'COMPLETED').toUpperCase()!=='CANCELLED';
+}
+salesInRangeV14=function(start,end,unit='ALL'){
+  return (sales||[]).filter(s=>{
+    if(!validSaleV1310(s))return false;
+    const d=new Date(s.created_at||s.sale_date||0);
+    if(d<start||d>end)return false;
+    if(unit==='ALL')return true;
+    const items=(saleItems||[]).filter(i=>String(i.sale_id)===String(s.id));
+    return items.length
+      ?items.some(i=>itemUnitCodeV1215(i)===unit)
+      :inUnitV14(saleUnitV14(s),unit);
+  });
+};
+function paymentPartsV1310(sale){
+  const total=Number(sale.total||0);
+  const method=String(sale.payment_method||'').toUpperCase();
+  if(method==='MIXTO'){
+    return {
+      efectivo:Number(sale.payment_cash_amount||0),
+      tarjeta:Number(sale.payment_card_amount||0),
+      transferencia:Number(sale.payment_transfer_amount||0)
+    };
+  }
+  return {
+    efectivo:method.includes('EFECTIVO')?total:0,
+    tarjeta:method.includes('TARJETA')?total:0,
+    transferencia:method.includes('TRANSFER')?total:0
+  };
+}
+function saleUnitMetricsV1310(sale){
+  const items=(saleItems||[]).filter(i=>String(i.sale_id)===String(sale.id));
+  if(!items.length){
+    const code=String(saleUnitV14(sale)||'FER').toUpperCase();
+    const revenue=Number(sale.total||0);
+    const profit=Number(sale.profit_total||0);
+    return [{code,revenue,cost:Math.max(0,revenue-profit),profit}];
+  }
+  const gross=items.reduce((sum,item)=>sum+Number(item.total||0),0);
+  const saleTotal=Number(sale.total||gross);
+  const ratio=gross>0?saleTotal/gross:1;
+  const grouped=new Map();
+  items.forEach(item=>{
+    const code=itemUnitCodeV1215(item)||'FER';
+    const previous=grouped.get(code)||{code,revenue:0,cost:0,profit:0};
+    const revenue=Number(item.total||0)*ratio;
+    const cost=Number(item.unit_cost||0)*Number(item.quantity||0);
+    previous.revenue+=revenue;
+    previous.cost+=cost;
+    previous.profit+=revenue-cost;
+    grouped.set(code,previous);
+  });
+  return [...grouped.values()];
+}
+function businessUnitLabelV1310(code){
+  if(code==='FER')return 'Ferretería';
+  if(code==='LIB')return 'Librería';
+  if(code==='FX')return 'Mesa de Cambio';
+  return code||'General';
+}
+function buildPeriodProfitabilityV1310(start,end,unit){
+  const selected=salesInRangeV14(start,end,'ALL');
+  const groups=new Map();
+  selected.forEach(sale=>{
+    const parts=paymentPartsV1310(sale);
+    saleUnitMetricsV1310(sale).forEach(metric=>{
+      if(unit!=='ALL'&&metric.code!==unit)return;
+      const row=groups.get(metric.code)||{
+        unidad:businessUnitLabelV1310(metric.code),
+        facturas:new Set(),ventas:0,costo:0,ganancia:0,
+        efectivo:0,tarjeta:0,transferencia:0
+      };
+      const share=Number(sale.total||0)>0?metric.revenue/Number(sale.total):0;
+      row.facturas.add(String(sale.id));
+      row.ventas+=metric.revenue;
+      row.costo+=metric.cost;
+      row.ganancia+=metric.profit;
+      row.efectivo+=parts.efectivo*share;
+      row.tarjeta+=parts.tarjeta*share;
+      row.transferencia+=parts.transferencia*share;
+      groups.set(metric.code,row);
+    });
+  });
+  const rows=[...groups.values()].map(row=>({
+    ...row,
+    facturas:row.facturas.size,
+    margen:row.ventas>0?(row.ganancia/row.ventas)*100:0
+  })).sort((a,b)=>b.ventas-a.ventas);
+  if(rows.length>1){
+    const total=rows.reduce((a,row)=>{
+      a.ventas+=row.ventas;
+      a.costo+=row.costo;
+      a.ganancia+=row.ganancia;
+      a.efectivo+=row.efectivo;
+      a.tarjeta+=row.tarjeta;
+      a.transferencia+=row.transferencia;
+      return a;
+    },{unidad:'TOTAL',facturas:0,ventas:0,costo:0,ganancia:0,efectivo:0,tarjeta:0,transferencia:0});
+    total.facturas=new Set(selected.map(s=>String(s.id))).size;
+    total.margen=total.ventas>0?(total.ganancia/total.ventas)*100:0;
+    rows.push(total);
+  }
+  return {
+    title:'Ventas y ganancias del período',
+    columns:['unidad','facturas','ventas','costo','ganancia','margen','efectivo','tarjeta','transferencia'],
+    rows
+  };
+}
+function formatProfitabilityCellV1310(key,value){
+  if(['ventas','costo','ganancia','efectivo','tarjeta','transferencia'].includes(key))return money(value);
+  if(key==='margen')return `${Number(value||0).toFixed(1)}%`;
+  return escapeHtmlV14(value);
+}
+function renderPeriodProfitabilityV1310(){
+  setDefaultReportDatesV14();
+  const {start,end,unit}=reportRangeV14();
+  currentReportV14=buildPeriodProfitabilityV1310(start,end,unit);
+  const rows=currentReportV14.rows||[];
+  const columns=currentReportV14.columns||[];
+  const total=rows.find(r=>r.unidad==='TOTAL')||rows[0]||{};
+  $('#reportTitle').textContent=currentReportV14.title;
+  $('#reportSubtitle').textContent=`Periodo ${localDateInputV1310(start)} al ${localDateInputV1310(end)} · ${unit==='ALL'?'Todas las unidades':businessUnitLabelV1310(unit)}`;
+  $('#reportTable').innerHTML=
+    '<tr>'+columns.map(c=>`<th>${escapeHtmlV14(labelV14(c))}</th>`).join('')+'</tr>'+
+    (rows.length
+      ?rows.map(row=>`<tr class="${row.unidad==='TOTAL'?'report-total-v1310':''}">${columns.map(c=>`<td>${formatProfitabilityCellV1310(c,row[c])}</td>`).join('')}</tr>`).join('')
+      :'<tr><td colspan="9" class="sales-empty-v1217">No hay ventas en este período.</td></tr>');
+  const expenses=expensesInRangeV14(start,end,unit).reduce((sum,e)=>sum+Number(e.amount||0),0);
+  const inventory=inventoryByUnitV14(unit).reduce((sum,p)=>sum+Number(p.stock||0)*Number(p.purchase_price||0),0);
+  $('#reportKpiRevenue').textContent=money(total.ventas||0);
+  $('#reportKpiProfit').textContent=money(total.ganancia||0);
+  $('#reportKpiExpenses').textContent=money(expenses);
+  $('#reportKpiInventory').textContent=money(inventory);
+  $('#reportSummary').innerHTML=`
+    <div><span>Facturas</span><strong>${Number(total.facturas||0)}</strong></div>
+    <div><span>Costo vendido</span><strong>${money(total.costo||0)}</strong></div>
+    <div><span>Ganancia bruta</span><strong>${money(total.ganancia||0)}</strong></div>
+    <div><span>Margen real</span><strong>${Number(total.margen||0).toFixed(1)}%</strong></div>`;
+  const chartHost=$('#salesChartsV1221');
+  if(chartHost){chartHost.classList.add('hidden');chartHost.innerHTML='';}
+}
+const renderReportV1310Base=renderReportV14;
+renderReportV14=function(){
+  if(($('#reportType')?.value||'')==='period_profitability'){
+    renderPeriodProfitabilityV1310();
+    return;
+  }
+  renderReportV1310Base();
+};
+
+/* El historial separa efectivo, tarjeta y total controlado.
+   Nunca vuelve a comparar efectivo esperado contra efectivo + tarjeta. */
+const renderCashV1310Base=renderCash;
+renderCash=function(){
+  populateCashFilterBoxesV83();
+  renderCashOperationalBannerV81();
+  updateClosingCashSummaryV84();
+  const rows=filteredCashSessionsV83();
+  const table=$('#cashTable');
+  if(!table)return renderCashV1310Base();
+  table.innerHTML='<tr><th>Fecha</th><th>Caja</th><th>Cajero</th><th>Apertura</th><th>Cierre</th><th>Estado</th><th>Vendido</th><th>Efectivo esperado</th><th>Efectivo contado</th><th>Tarjeta</th><th>Transferencia</th><th>Total controlado</th><th>Diferencia real</th><th>Acciones</th></tr>'+
+    rows.map(s=>{
+      const summary=cashSessionSalesV83(s.id);
+      const expectedCash=expectedCashNioV83(s);
+      const countedCash=Number(s.counted_cash_nio??s.counted_cash??0);
+      const countedCard=Number(s.counted_card||0);
+      const countedTransfer=Number(s.counted_transfer||0);
+      const controlled=Number(s.counted_total??(countedCash+countedCard+countedTransfer));
+      const difference=Number(s.difference_amount??0);
+      const closed=String(s.status||'').toUpperCase()==='CLOSED';
+      return `<tr>
+        <td>${cashShortDateV83(s.opened_at)}</td>
+        <td>${escapeHtmlV6(s.box_name||'Caja')}</td>
+        <td>${escapeHtmlV6(s.cashier_name||'')}</td>
+        <td>${cashTimeLabelV81(s.opened_at)}</td>
+        <td>${s.closed_at?cashTimeLabelV81(s.closed_at):'Pendiente'}</td>
+        <td><span class="status-pill ${closed?'status-closed':'status-open'}">${closed?'Cerrada':'Abierta'}</span></td>
+        <td>${money(summary.total)}</td>
+        <td>${money(expectedCash)}</td>
+        <td>${closed?money(countedCash):'Pendiente'}</td>
+        <td>${closed?money(countedCard):money(summary.card)}</td>
+        <td>${closed?money(countedTransfer):money(summary.transfer)}</td>
+        <td>${closed?money(controlled):'Pendiente'}</td>
+        <td><span class="difference-pill ${closed?diffClassV6(difference):'neutral'}">${closed?diffLabelV6(difference):'Pendiente'}</span></td>
+        <td class="cash-actions"><button type="button" onclick="viewClosingTicketV6('${s.id}')">Ver ticket</button><button type="button" onclick="printClosingAuditV6('${s.id}')">Imprimir</button></td>
+      </tr>`;
+    }).join('');
+};
+
+let reportPresetInitializedV1310=false;
+function bindV1310(){
+  const preset=$('#reportPeriodPreset');
+  if(preset){
+    preset.onchange=()=>{
+      applyReportPeriodPresetV1310(preset.value);
+      renderReportV14();
+    };
+    if(!reportPresetInitializedV1310){
+      applyReportPeriodPresetV1310(preset.value);
+      reportPresetInitializedV1310=true;
+      if($('#reports')?.classList.contains('show'))renderReportV14();
+    }
+  }
+  ['reportStart','reportEnd'].forEach(id=>{
+    const el=$('#'+id);
+    if(el)el.addEventListener('change',()=>{
+      if($('#reportPeriodPreset'))$('#reportPeriodPreset').value='CUSTOM';
+    });
+  });
+  if($('#generateReportBtn'))$('#generateReportBtn').onclick=renderReportV14;
+  if($('#closeCashBtn'))$('#closeCashBtn').onclick=closeCash;
+  applyUnifiedVersionV136();
+}
+setTimeout(bindV1310,1100);
+window.addEventListener('load',()=>setTimeout(bindV1310,250),{once:true});

@@ -1,6 +1,15 @@
-# MYM Comercial ERP V13.9
+# MYM Comercial ERP V13.10
 
-Entrega consolidada de MYM Comercial ERP. La aplicación, módulos, formularios y documentación operativa utilizan una sola versión: **V13.9**.
+Entrega consolidada de MYM Comercial ERP. La aplicación, módulos, formularios y documentación operativa utilizan una sola versión: **V13.10**.
+
+## Cambios V13.10
+
+- Reporte de ventas y ganancias por mes, quincena actual, primera quincena, segunda quincena o fechas personalizadas.
+- Rentabilidad calculada con el costo histórico de cada línea vendida y descontando las ventas anuladas.
+- Separación por Ferretería, Librería y total consolidado.
+- Desglose de efectivo, tarjeta y transferencia dentro del reporte.
+- Historial de caja con efectivo esperado, efectivo contado, tarjeta, transferencia y total controlado en columnas independientes.
+- El cierre solo informa éxito cuando Supabase confirma que la sesión quedó cerrada.
 
 ## Publicación en Vercel
 
@@ -28,6 +37,7 @@ No configure `app` como Root Directory, porque eso excluiría el sitio web públ
 - Conexión automática después del ingreso.
 - Eliminación segura de productos duplicados desde Inventario.
 - Desactivación sin pérdida de historial cuando el producto ya tiene movimientos.
+- Sincronización del nombre comercial en la lista y la ficha lateral al editar.
 
 ## Supabase
 

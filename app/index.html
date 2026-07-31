@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MYM Comercial ERP V13.9</title>
+  <title>MYM Comercial ERP V13.10</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=1393">
 </head>
 <body class="auth-locked">
   <div id="loginPortal" class="login-portal">
@@ -58,7 +58,7 @@
   <aside class="sidebar" id="appSidebar">
     <div class="brand">
       <img src="assets/logo-mm-ferreteria.png" alt="MM Ferretería">
-      <div><b>MYM Comercial</b><span>V13.9</span></div>
+      <div><b>MYM Comercial</b><span>V13.10</span></div>
     </div>
     <nav>
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -187,7 +187,7 @@
       </div>
 
       <form id="productForm" class="panel form hidden product-master-form">
-        <div class="formTitleRow"><div><h3>Maestro de Producto</h3><p>Define cómo se vende, mide, etiqueta y controla este producto.</p></div><span class="version-pill">V13.9</span></div>
+        <div class="formTitleRow"><div><h3>Maestro de Producto</h3><p>Define cómo se vende, mide, etiqueta y controla este producto.</p></div><span class="version-pill">V13.10</span></div>
         <input type="hidden" id="productId">
         <div class="product-form-sections">
           <section class="product-form-section"><h4>Identificación</h4><div class="formGrid"><select id="productBusinessUnit" required><option value="">Unidad de negocio</option></select><select id="categorySelect"></select><input id="productName" required placeholder="Nombre comercial"><input id="brand" placeholder="Marca"><input id="supplierName" placeholder="Proveedor"><input id="manufacturerCode" placeholder="Código fabricante"><input id="supplierCode" placeholder="Código del proveedor"><input id="productAlias" placeholder="Alias / nombres comunes"></div></section>
@@ -551,6 +551,7 @@
       <div class="report-toolbar panel">
         <label>Reporte
           <select id="reportType">
+            <option value="period_profitability">Ventas y ganancias del período</option>
             <option value="daily_sales">Ventas diarias</option>
             <option value="weekly_sales">Ventas semanales</option>
             <option value="monthly_sales">Ventas mensuales</option>
@@ -558,6 +559,15 @@
             <option value="inventory">Inventario</option>
             <option value="income_statement">Estado de resultados</option>
             <option value="balance_sheet">Balance general</option>
+          </select>
+        </label>
+        <label>Período rápido
+          <select id="reportPeriodPreset">
+            <option value="THIS_MONTH">Este mes</option>
+            <option value="CURRENT_FORTNIGHT">Quincena actual</option>
+            <option value="FIRST_HALF">Primera quincena</option>
+            <option value="SECOND_HALF">Segunda quincena</option>
+            <option value="CUSTOM">Fechas personalizadas</option>
           </select>
         </label>
         <label>Desde <input id="reportStart" type="date"></label>
@@ -643,6 +653,6 @@
   <div id="ticketModal" class="modal hidden"><div class="modalCard"><div id="ticket80"></div><div class="modalActions"><button onclick="printTicket()" class="primary">Imprimir ticket</button><button onclick="closeTicket()" class="ghost">Cerrar</button></div></div></div>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=1393"></script>
 </body>
 </html>

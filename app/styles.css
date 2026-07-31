@@ -1186,7 +1186,8 @@ input,select,textarea,button{max-width:100%}
 
 /* V13.9 - eliminación segura de productos */
 .delete-product-v139{margin-right:auto}
-.delete-product-card-v139{width:min(94vw,620px)}
+#deleteProductModalV139{z-index:2147483647!important}
+.delete-product-card-v139{width:min(94vw,620px);background:#101827!important;color:#f8fafc!important;border:1px solid #334155}
 .modal-title-row-v139{display:flex;justify-content:space-between;gap:16px;align-items:start}
 .modal-title-row-v139 h3{margin:4px 0 0}
 .delete-product-summary-v139{display:grid;grid-template-columns:1.5fr 1fr .7fr;gap:10px;margin:16px 0}
@@ -1196,4 +1197,19 @@ input,select,textarea,button{max-width:100%}
 .delete-product-reason-v139{display:grid;gap:7px;margin:14px 0;font-weight:800}
 .delete-product-reason-v139 textarea{width:100%;resize:vertical}
 .delete-product-message-v139{min-height:20px;margin:8px 0;color:#fca5a5;font-weight:800}
+.delete-product-v139,.delete-confirm-v139{background:linear-gradient(135deg,#f97316,#ea580c)!important;color:#fff!important;border:1px solid #fb923c!important;box-shadow:0 10px 28px rgba(249,115,22,.25)}
+.delete-product-v139:hover,.delete-confirm-v139:hover{filter:brightness(1.08);transform:translateY(-1px)}
 @media(max-width:620px){.delete-product-summary-v139{grid-template-columns:1fr}.delete-product-v139{margin-right:0}}
+
+/* V13.10 - rentabilidad por período y cierre de caja legible */
+.report-toolbar{grid-template-columns:repeat(6,minmax(150px,1fr))}
+.report-total-v1310 td{font-weight:900;background:rgba(249,115,22,.10);border-top:2px solid #f97316}
+#reportSummary.financial-summary{grid-template-columns:repeat(4,minmax(140px,1fr))}
+#cashTable th,#cashTable td{vertical-align:middle}
+#cashTable .difference-pill.neutral{color:var(--muted);background:rgba(148,163,184,.10);border-color:rgba(148,163,184,.22)}
+@media(max-width:1100px){
+  .report-toolbar{grid-template-columns:repeat(3,minmax(160px,1fr))}
+}
+@media(max-width:720px){
+  .report-toolbar,#reportSummary.financial-summary{grid-template-columns:minmax(0,1fr)}
+}
