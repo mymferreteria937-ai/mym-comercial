@@ -213,6 +213,24 @@ as $$
   select lower(regexp_replace(trim(coalesce(p_value,'')), '\s+', ' ', 'g'));
 $$;
 
+create or replace function public.mm_product_presentation(
+  p_sale_type text,
+  p_unit_type text,
+  p_name text
+)
+returns text
+language sql
+immutable
+as $$
+  select (
+    case
+      when public.mm_normalize_product_identity(p_name) ~ '(^| )(caja|paquete|pack)( |$)' then 'paquete'
+      when public.mm_normalize_product_identity(p_name) ~ '(^| )(unidad|und)( |$)' then 'unidad'
+      else public.mm_normalize_product_identity(coalesce(p_sale_type,'UNIDAD'))
+    end
+  ) || '|' || public.mm_normalize_product_identity(coalesce(p_unit_type,'UND'));
+$$;
+
 create or replace function public.mm_prevent_duplicate_product()
 returns trigger
 language plpgsql
@@ -235,6 +253,10 @@ begin
          = public.mm_normalize_product_identity(old.name)
      and public.mm_normalize_product_identity(new.brand)
          = public.mm_normalize_product_identity(old.brand)
+     and public.mm_normalize_product_identity(new.sale_type)
+         = public.mm_normalize_product_identity(old.sale_type)
+     and public.mm_normalize_product_identity(new.unit_type)
+         = public.mm_normalize_product_identity(old.unit_type)
   then
     return new;
   end if;
@@ -249,11 +271,15 @@ begin
         public.mm_normalize_product_identity(new.supplier_code)<>''
         and public.mm_normalize_product_identity(p.supplier_code)
             = public.mm_normalize_product_identity(new.supplier_code)
+        and public.mm_product_presentation(p.sale_type,p.unit_type,p.name)
+            = public.mm_product_presentation(new.sale_type,new.unit_type,new.name)
       )
       or (
         public.mm_normalize_product_identity(new.manufacturer_code)<>''
         and public.mm_normalize_product_identity(p.manufacturer_code)
             = public.mm_normalize_product_identity(new.manufacturer_code)
+        and public.mm_product_presentation(p.sale_type,p.unit_type,p.name)
+            = public.mm_product_presentation(new.sale_type,new.unit_type,new.name)
       )
       or (
         public.mm_normalize_product_identity(new.barcode)<>''
@@ -266,6 +292,8 @@ begin
             = public.mm_normalize_product_identity(new.name)
         and public.mm_normalize_product_identity(p.brand)
             = public.mm_normalize_product_identity(new.brand)
+        and public.mm_product_presentation(p.sale_type,p.unit_type,p.name)
+            = public.mm_product_presentation(new.sale_type,new.unit_type,new.name)
       )
     )
   order by p.created_at
@@ -285,7 +313,7 @@ $$;
 drop trigger if exists trg_mm_prevent_duplicate_product on public.products;
 create trigger trg_mm_prevent_duplicate_product
 before insert or update of
-  business_unit_id,supplier_code,manufacturer_code,barcode,name,brand
+  business_unit_id,supplier_code,manufacturer_code,barcode,name,brand,sale_type,unit_type
 on public.products
 for each row execute function public.mm_prevent_duplicate_product();
 

@@ -5551,6 +5551,17 @@ function currentProductEditingIdV1314(){
 function normalizeProductIdentityV136(value){
   return String(value||'').trim().toLocaleLowerCase('es-NI').replace(/\s+/g,' ');
 }
+function productPresentationV1314(product={}){
+  const saleType=normalizeProductIdentityV136(product.sale_type||'UNIDAD');
+  const unitType=normalizeProductIdentityV136(product.unit_type||'UND');
+  const productName=normalizeProductIdentityV136(product.name);
+  /* Algunos registros antiguos no guardaron correctamente el tipo de venta.
+     CAJA y UNIDAD en el nombre siguen representando presentaciones distintas. */
+  const namedPresentation=/(^|\s)(caja|paquete|pack)(\s|$)/.test(productName)
+    ?'PAQUETE'
+    :/(^|\s)(unidad|und)(\s|$)/.test(productName)?'UNIDAD':'';
+  return `${namedPresentation||saleType}|${unitType}`;
+}
 function duplicateProductV136(){
   const currentId=currentProductEditingIdV1314();
   const unitId=String($('#productBusinessUnit')?.value||'');
@@ -5558,12 +5569,18 @@ function duplicateProductV136(){
   const manufacturerCode=normalizeProductIdentityV136($('#manufacturerCode')?.value);
   const name=normalizeProductIdentityV136($('#productName')?.value);
   const brand=normalizeProductIdentityV136($('#brand')?.value);
+  const presentation=productPresentationV1314({
+    sale_type:$('#saleType')?.value||'UNIDAD',
+    unit_type:$('#unitType')?.value||'UND',
+    name:$('#productName')?.value||''
+  });
   return (products||[]).find(product=>{
     if(String(product.id)===currentId)return false;
     if(String(product.business_unit_id||'')!==unitId)return false;
-    const sameSupplier=supplierCode&&normalizeProductIdentityV136(product.supplier_code)===supplierCode;
-    const sameManufacturer=manufacturerCode&&normalizeProductIdentityV136(product.manufacturer_code)===manufacturerCode;
-    const sameName=name&&normalizeProductIdentityV136(product.name)===name&&normalizeProductIdentityV136(product.brand)===brand;
+    const samePresentation=productPresentationV1314(product)===presentation;
+    const sameSupplier=samePresentation&&supplierCode&&normalizeProductIdentityV136(product.supplier_code)===supplierCode;
+    const sameManufacturer=samePresentation&&manufacturerCode&&normalizeProductIdentityV136(product.manufacturer_code)===manufacturerCode;
+    const sameName=samePresentation&&name&&normalizeProductIdentityV136(product.name)===name&&normalizeProductIdentityV136(product.brand)===brand;
     return sameSupplier||sameManufacturer||sameName;
   })||null;
 }

@@ -10,6 +10,8 @@ Entrega consolidada de MYM Comercial ERP. La aplicación, módulos, formularios 
 - Encabezado aumentado sin ampliar el ancho del comprobante.
 - Corrección de la edición de productos: el registro abierto queda excluido de
   la validación de duplicados, aunque el formulario se reconstruya en pantalla.
+- Presentaciones CAJA y UNIDAD del mismo artículo ya no se confunden como
+  duplicados cuando comparten código de proveedor.
 
 ## Cambios V13.11
 
@@ -63,6 +65,7 @@ Ejecute una sola vez antes de publicar:
 1. `supabase/schema_v13_8_unificacion.sql`
 2. `supabase/schema_v13_9_eliminar_productos.sql`
 3. `supabase/schema_v13_11_anulacion_auditable.sql`
+4. `supabase/schema_v13_14_presentaciones_producto.sql`
 
 La migración convierte los precios automáticos existentes a margen real sobre
 la venta. Los productos marcados con precio manual no se modifican.
