@@ -1,6 +1,23 @@
-# MYM Comercial ERP V13.10
+# MYM Comercial ERP V13.14
 
-Entrega consolidada de MYM Comercial ERP. La aplicación, módulos, formularios y documentación operativa utilizan una sola versión: **V13.10**.
+Entrega consolidada de MYM Comercial ERP. La aplicación, módulos, formularios y documentación operativa utilizan una sola versión: **V13.14**.
+
+## Cambios V13.14
+
+- Ticket de 80 mm centrado sobre un área imprimible segura de 72 mm.
+- Espacios laterales iguales para evitar desplazamiento y corte del borde derecho.
+- Letra general aumentada a 16 px y productos a 15 px.
+- Encabezado aumentado sin ampliar el ancho del comprobante.
+- Corrección de la edición de productos: el registro abierto queda excluido de
+  la validación de duplicados, aunque el formulario se reconstruya en pantalla.
+
+## Cambios V13.11
+
+- Ticket térmico desde el borde superior y con corte ajustado al contenido.
+- Motivo obligatorio para anular una factura.
+- Motivo, fecha y usuario visibles en el historial y en el comprobante anulado.
+- Integración del cajón por controlador de Windows o por puente local ESC/POS.
+- Prueba manual de apertura desde Configuración.
 
 ## Cambios V13.10
 
@@ -45,6 +62,7 @@ Ejecute una sola vez antes de publicar:
 
 1. `supabase/schema_v13_8_unificacion.sql`
 2. `supabase/schema_v13_9_eliminar_productos.sql`
+3. `supabase/schema_v13_11_anulacion_auditable.sql`
 
 La migración convierte los precios automáticos existentes a margen real sobre
 la venta. Los productos marcados con precio manual no se modifican.

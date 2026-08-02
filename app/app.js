@@ -5544,11 +5544,15 @@ window.addEventListener('load',applyUnifiedVersionV136,{once:true});
 /* =========================================================
    V13.8 - Margen real y prevención de productos duplicados
    ========================================================= */
+let productEditingIdV1314='';
+function currentProductEditingIdV1314(){
+  return String($('#productId')?.value||productEditingIdV1314||'');
+}
 function normalizeProductIdentityV136(value){
   return String(value||'').trim().toLocaleLowerCase('es-NI').replace(/\s+/g,' ');
 }
 function duplicateProductV136(){
-  const currentId=String($('#productId')?.value||'');
+  const currentId=currentProductEditingIdV1314();
   const unitId=String($('#productBusinessUnit')?.value||'');
   const supplierCode=normalizeProductIdentityV136($('#supplierCode')?.value);
   const manufacturerCode=normalizeProductIdentityV136($('#manufacturerCode')?.value);
@@ -5738,11 +5742,18 @@ async function executeDeleteProductV139(){
 }
 const editProductBaseV139=window.editProduct;
 window.editProduct=function(id){
+  const editingId=String(id||'');
+  productEditingIdV1314=editingId;
   editProductBaseV139(id);
+  /* El formulario puede reconstruirse durante la apertura. Restauramos el ID
+     al final para que la validación nunca compare el producto consigo mismo. */
+  productEditingIdV1314=editingId;
+  if($('#productId'))$('#productId').value=editingId;
   toggleDeleteProductButtonV139(id);
 };
 const resetProductFormBaseV139=resetProductForm;
 resetProductForm=function(){
+  productEditingIdV1314='';
   resetProductFormBaseV139();
   toggleDeleteProductButtonV139(null);
 };
@@ -5770,7 +5781,7 @@ setTimeout(()=>{
 async function saveProductV1392(e){
   e?.preventDefault?.();
   if(!guardAdmin())return;
-  const id=String($('#productId')?.value||'');
+  const id=currentProductEditingIdV1314();
   const existing=(products||[]).find(product=>String(product.id)===id)||null;
   const name=String($('#productName')?.value||'').replace(/\s+/g,' ').trim();
   if(!name)return alert('Escriba el nombre comercial del producto.');
@@ -6113,3 +6124,158 @@ function bindV1310(){
 }
 setTimeout(bindV1310,1100);
 window.addEventListener('load',()=>setTimeout(bindV1310,250),{once:true});
+
+/* =========================================================
+   V13.11 - Impresión compacta, anulación visible y cajón
+   ========================================================= */
+const MYM_DRAWER_SETTINGS_V1311_KEY='mym_drawer_settings_v1311';
+function getDrawerSettingsV1311(){
+  const defaults={enabled:true,mode:'DRIVER',printerName:'3nStar RPT004',endpoint:'http://127.0.0.1:18181/drawer'};
+  try{return {...defaults,...JSON.parse(localStorage.getItem(MYM_DRAWER_SETTINGS_V1311_KEY)||'{}')}}catch(_){return defaults}
+}
+function saveDrawerSettingsV1311(){
+  const cfg={
+    enabled:Boolean($('#drawerEnabledV1311')?.checked),
+    mode:$('#drawerModeV1311')?.value||'DRIVER',
+    printerName:($('#drawerPrinterV1311')?.value||'').trim()||'3nStar RPT004',
+    endpoint:($('#drawerEndpointV1311')?.value||'').trim()||'http://127.0.0.1:18181/drawer'
+  };
+  localStorage.setItem(MYM_DRAWER_SETTINGS_V1311_KEY,JSON.stringify(cfg));
+  showToastV1043('Configuración de impresora y cajón guardada.','success');
+  renderSettingsV1220();
+}
+async function openCashDrawerV1311({silent=false}={}){
+  const cfg=getDrawerSettingsV1311();
+  if(!cfg.enabled)return false;
+  if(cfg.mode!=='BRIDGE'){
+    if(!silent)showToastV1043('Modo controlador: el cajón abre cuando Windows envía el trabajo a la impresora.','success');
+    return true;
+  }
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),1800);
+  try{
+    const response=await fetch(cfg.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({printer_name:cfg.printerName}),signal:controller.signal});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok||result.ok===false)throw new Error(result.error||`HTTP ${response.status}`);
+    if(!silent)showToastV1043('Orden enviada al cajón.','success');
+    return true;
+  }catch(error){
+    console.error('Cajón V13.11:',error);
+    showToastV1043('No se pudo abrir el cajón. Verifique que el puente local esté iniciado.','error');
+    return false;
+  }finally{clearTimeout(timeout)}
+}
+window.saveDrawerSettingsV1311=saveDrawerSettingsV1311;
+window.testCashDrawerV1311=()=>openCashDrawerV1311({silent:false});
+
+function renderDrawerSettingsV1311(){
+  const host=$('#settings');
+  if(!host||$('#drawerSettingsV1311'))return;
+  const cfg=getDrawerSettingsV1311();
+  host.insertAdjacentHTML('beforeend',`<div id="drawerSettingsV1311" class="panel drawer-settings-v1311">
+    <div><h3>Impresora y cajón de dinero</h3><p>El cajón debe estar conectado al puerto DK/RJ11 de la impresora. El navegador no puede enviar por sí solo el pulso ESC/POS.</p></div>
+    <div class="drawer-grid-v1311">
+      <label class="drawer-check-v1311"><input id="drawerEnabledV1311" type="checkbox" ${cfg.enabled?'checked':''}> Abrir el cajón al imprimir</label>
+      <label>Forma de apertura<select id="drawerModeV1311"><option value="DRIVER" ${cfg.mode==='DRIVER'?'selected':''}>Controlador de Windows (recomendado)</option><option value="BRIDGE" ${cfg.mode==='BRIDGE'?'selected':''}>Puente local ESC/POS</option></select></label>
+      <label>Nombre de la impresora en Windows<input id="drawerPrinterV1311" value="${escapeHtmlV6(cfg.printerName)}" placeholder="3nStar RPT004"></label>
+      <label class="drawer-bridge-v1311 ${cfg.mode==='BRIDGE'?'':'hidden'}">Dirección del puente local<input id="drawerEndpointV1311" value="${escapeHtmlV6(cfg.endpoint)}"></label>
+    </div>
+    <div class="drawer-note-v1311"><b>Modo controlador:</b> active “Abrir cajón antes/después de imprimir” en Propiedades de la impresora de Windows. <b>Modo puente:</b> ejecute el archivo incluido en la carpeta scripts.</div>
+    <div class="toolbar"><button type="button" class="primary" onclick="saveDrawerSettingsV1311()">Guardar configuración</button><button type="button" class="ghost" onclick="testCashDrawerV1311()">Probar apertura</button></div>
+  </div>`);
+  $('#drawerModeV1311').onchange=event=>$('.drawer-bridge-v1311')?.classList.toggle('hidden',event.target.value!=='BRIDGE');
+}
+const renderSettingsBaseV1311=renderSettingsV1220;
+renderSettingsV1220=function(){renderSettingsBaseV1311();renderDrawerSettingsV1311()};
+
+function cancelledSaleV1311(sale){return String(sale?.status||'COMPLETED').toUpperCase()==='CANCELLED'}
+function voidReasonV1311(sale){return String(sale?.void_reason||'').trim()||'Motivo no registrado (anulación anterior)'}
+function voidActorV1311(sale){
+  const user=(users||[]).find(item=>String(item.id)===String(sale?.voided_by||''));
+  return user?.name||user?.username||sale?.voided_by_name||'Usuario no identificado';
+}
+function saleItemsV1311(sale){
+  return Array.isArray(sale?.items)&&sale.items.length?sale.items:(saleItems||[]).filter(item=>String(item.sale_id)===String(sale?.id));
+}
+function renderTicketV1311(sale){
+  const items=saleItemsV1311(sale);
+  const cancelled=cancelledSaleV1311(sale);
+  const customer=sale.customer_name||customerNameForSaleV1214(sale)||'Cliente eventual';
+  const received=Number(sale.amount_received??sale.total??0);
+  const discount=Number(sale.discount||0);
+  $('#ticket80').innerHTML=`<h3 class="center">MYM FERRETERÍA</h3><div class="center">Marin Mayorga<br>Managua, Nicaragua</div>
+    ${cancelled?`<div class="ticket-void-v1311"><b>COMPROBANTE ANULADO</b><span>Motivo: ${escapeHtmlV6(voidReasonV1311(sale))}</span><small>${sale.voided_at?new Date(sale.voided_at).toLocaleString('es-NI',{timeZone:'America/Managua'}):'Fecha no registrada'} · ${escapeHtmlV6(voidActorV1311(sale))}</small></div>`:''}
+    <hr>Factura: ${escapeHtmlV6(sale.invoice_no||'')}<br>Fecha: ${new Date(sale.created_at).toLocaleString('es-NI',{timeZone:'America/Managua'})}<br>Cliente: ${escapeHtmlV6(customer)}<br>Pago: ${escapeHtmlV6(sale.payment_method||'')}
+    ${sale.payment_reference?`<br>Referencia: ${escapeHtmlV6(sale.payment_reference)}`:''}<hr>
+    ${items.map(item=>`<div><b>${escapeHtmlV6(item.product_name||item.name||'Producto')}</b><div class="ticketRow"><span>${Number(item.quantity||0)} x ${money(item.unit_price)}</span><span>${money(item.total)}</span></div></div>`).join('')}
+    <hr>${discount>0?`<div class="ticketRow"><span>Subtotal</span><span>${money(sale.subtotal||Number(sale.total)+discount)}</span></div><div class="ticketRow"><span>Descuento</span><span>-${money(discount)}</span></div>`:''}
+    <div class="ticketRow"><b>Total</b><b>${money(sale.total)}</b></div><div class="ticketRow"><span>Recibido</span><span>${money(received)}</span></div><div class="ticketRow"><span>Cambio</span><span>${money(sale.change_amount||0)}</span></div><hr>
+    <div class="center">${cancelled?'Documento sin validez comercial':'Gracias por su compra'}</div>`;
+}
+renderTicket=renderTicketV1311;
+
+function enhanceCancelledSalesV1311(){
+  [...document.querySelectorAll('#salesTable tr')].slice(1).forEach(row=>{
+    const invoice=row.querySelector('td:first-child')?.textContent?.trim();
+    const sale=(sales||[]).find(item=>String(item.invoice_no||'')===invoice);
+    if(!sale||!cancelledSaleV1311(sale))return;
+    row.classList.add('sale-cancelled-v1220');
+    const cell=row.querySelector('td:nth-child(6)');
+    if(cell&&!cell.querySelector('.void-reason-inline-v1311')){
+      const tag=cell.querySelector('.tag');if(tag)tag.textContent='ANULADA';
+      cell.insertAdjacentHTML('beforeend',`<small class="void-reason-inline-v1311"><b>Motivo:</b> ${escapeHtmlV6(voidReasonV1311(sale))}</small>`);
+    }
+  });
+}
+const renderSalesBaseV1311=renderSales;
+renderSales=function(){renderSalesBaseV1311();enhanceCancelledSalesV1311()};
+
+const openVoidSaleBaseV1311=window.openVoidSaleV1220;
+window.openVoidSaleV1220=function(saleId){
+  openVoidSaleBaseV1311(saleId);
+  setTimeout(()=>{
+    const reason=$('#voidReasonV1220');
+    const modal=reason?.closest('.modalCard');
+    const confirm=modal?.querySelector('.danger-v1220');
+    if(!reason||!confirm)return;
+    reason.required=true;reason.minLength=5;
+    reason.insertAdjacentHTML('afterend','<small class="void-reason-hint-v1311">Obligatorio: mínimo 5 caracteres. Este motivo quedará en el historial y en el comprobante.</small>');
+    const sync=()=>{confirm.disabled=reason.value.trim().length<5};
+    reason.addEventListener('input',sync);sync();
+  },30);
+};
+
+function thermalDocumentV1311(content){
+  const cfg=getPrintSettingsV1213();
+  const widthMm=cfg.width==='58'?58:80;
+  const printableMm=cfg.width==='58'?50:72;
+  return `<!doctype html><html><head><meta charset="utf-8"><title></title><style>
+    @page{size:${widthMm}mm 40mm;margin:0!important}*{box-sizing:border-box}html{margin:0!important;padding:0!important;width:${widthMm}mm!important;background:#fff!important;color:#000!important;overflow:visible!important}body{position:absolute;left:0;top:0;display:flex!important;justify-content:center!important;align-items:flex-start!important;margin:0!important;padding:0!important;width:${widthMm}mm!important;background:#fff!important;color:#000!important;overflow:visible!important;font-family:Arial,Helvetica,sans-serif;font-size:${cfg.width==='58'?'13px':'16px'};font-weight:500;line-height:1.32}.ticket{flex:0 0 ${printableMm}mm!important;width:${printableMm}mm!important;max-width:${printableMm}mm!important;margin:0!important;padding:0 0 ${cfg.autoCut?'1.5mm':'.5mm'}!important}.center{text-align:center}h3{font-size:${cfg.width==='58'?'18px':'22px'};line-height:1.1;margin:0 0 2px;font-weight:900}.ticketRow{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin:2px 0}.ticketRow span:first-child,.ticketRow b:first-child{min-width:0;overflow-wrap:anywhere}.ticketRow span:last-child,.ticketRow b:last-child{text-align:right;white-space:nowrap}.ticket>div>b{display:block;font-size:${cfg.width==='58'?'13px':'15px'};line-height:1.24;margin-top:4px;overflow-wrap:anywhere}hr{border:0;border-top:1px dashed #000;margin:5px 0}.ticket-void-v1311{border:2px solid #000;margin:5px 0;padding:5px;text-align:center}.ticket-void-v1311>*{display:block}.ticket-void-v1311 span{font-weight:700}.ticket-void-v1311 small{font-size:11px}.print-fallback-v1311{display:none}@media screen{.print-fallback-v1311.visible{display:block;position:fixed;left:8px;right:8px;bottom:8px;padding:10px;background:#111;color:#fff;border:0;border-radius:8px}}@media print{.print-fallback-v1311{display:none!important}}
+  </style></head><body><div id="thermalTicketV1311" class="ticket">${content}</div><button id="printFallbackV1311" class="print-fallback-v1311" onclick="window.print()">Imprimir ahora</button><script>
+    async function printV1311(){try{if(document.fonts?.ready)await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const ticket=document.getElementById('thermalTicketV1311');const contentMm=Math.ceil(ticket.getBoundingClientRect().height*25.4/96);const heightMm=Math.max(20,contentMm+1);const style=document.createElement('style');style.textContent='@page{size:${widthMm}mm '+heightMm+'mm!important;margin:0!important}html,body{height:'+heightMm+'mm!important}';document.head.appendChild(style);document.title='';await new Promise(r=>setTimeout(r,180));window.focus();window.print()}catch(error){console.error(error);document.getElementById('printFallbackV1311')?.classList.add('visible')}}window.addEventListener('load',()=>setTimeout(printV1311,100),{once:true});window.onafterprint=()=>setTimeout(()=>window.close(),120);<\/script></body></html>`;
+}
+function printThermalHtmlV1311(content){
+  const popup=window.open('','MYM_TICKET_PRINT','width=420,height=720,menubar=no,toolbar=no,location=no,status=no');
+  if(!popup){alert('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes para este sitio.');return false}
+  popup.document.open();popup.document.write(thermalDocumentV1311(content));popup.document.close();return true;
+}
+window.printTicket=function(){
+  const ticket=$('#ticket80');if(!ticket)return;
+  const cfg=getDrawerSettingsV1311();
+  if(cfg.enabled&&cfg.mode==='BRIDGE')openCashDrawerV1311({silent:true});
+  printThermalHtmlV1311(ticket.innerHTML);
+};
+window.printTestTicketV1213=function(){
+  const cfg=getPrintSettingsV1213();
+  const sample=`<h3 class="center">MYM FERRETERÍA</h3><div class="center">TICKET DE PRUEBA<br>${cfg.width} mm</div><hr><div class="ticketRow"><span>Producto de prueba</span><span>C$ 10.00</span></div><hr><div class="ticketRow"><b>TOTAL</b><b>C$ 10.00</b></div><hr><div class="center">Configuración correcta</div>`;
+  printThermalHtmlV1311(sample);
+};
+
+function applyVersionV1311(){
+  if(document.querySelector('title'))document.querySelector('title').textContent='MYM Comercial ERP V13.14';
+  if(document.querySelector('.brand span'))document.querySelector('.brand span').textContent='V13.14';
+  document.querySelectorAll('.version-pill').forEach(pill=>pill.textContent='V13.14');
+}
+const applyUnifiedVersionBaseV1311=applyUnifiedVersionV136;
+applyUnifiedVersionV136=function(){applyUnifiedVersionBaseV1311();applyVersionV1311()};
+setTimeout(applyVersionV1311,1350);
