@@ -6296,3 +6296,73 @@ function applyVersionV1311(){
 const applyUnifiedVersionBaseV1311=applyUnifiedVersionV136;
 applyUnifiedVersionV136=function(){applyUnifiedVersionBaseV1311();applyVersionV1311()};
 setTimeout(applyVersionV1311,1350);
+
+/* =========================================================
+   V13.14 - Apertura de caja única y resistente a doble clic
+   ========================================================= */
+let cashOpeningInProgressV1314=false;
+
+function setCashOpeningBusyV1314(busy){
+  cashOpeningInProgressV1314=busy;
+  const button=$('#openCashBtn');
+  if(!button)return;
+  button.disabled=busy;
+  button.setAttribute('aria-busy',busy?'true':'false');
+  button.textContent=busy?'Abriendo caja…':'Abrir caja';
+}
+
+openCash=async function(){
+  if(cashOpeningInProgressV1314)return;
+  const u=currentUserV6();
+  const boxId=$('#cashBoxName')?.value;
+  const box=cashBoxes.find(item=>String(item.id)===String(boxId));
+  if(!boxId||!box)return showToastV1043('Selecciona una caja válida.','error');
+
+  const openingNio=Number($('#openingAmount')?.value||0);
+  const openingUsd=Number($('#openingAmountUsd')?.value||0);
+  if(!Number.isFinite(openingNio)||openingNio<0||!Number.isFinite(openingUsd)||openingUsd<0){
+    return showToastV1043('El fondo inicial no puede ser negativo.','error');
+  }
+
+  setCashOpeningBusyV1314(true);
+  try{
+    const result=await sb.rpc('open_cash_session_v1314',{
+      p_cash_box_id:box.id,
+      p_box_name:box.name||box.box_name||'Caja',
+      p_cashier_name:u.name,
+      p_opened_by:u.id,
+      p_opening_nio:openingNio,
+      p_opening_usd:openingUsd
+    });
+    if(result.error){
+      const message=String(result.error.message||'');
+      if(message.includes('CASH_BOX_ALREADY_OPEN')){
+        await loadAll();
+        return showToastV1043('Esta caja ya tiene una sesión abierta. No se creó otra apertura.','error');
+      }
+      if(message.includes('open_cash_session_v1314')){
+        return showToastV1043('Falta ejecutar la actualización de Supabase para apertura única de caja.','error');
+      }
+      throw result.error;
+    }
+
+    const created=Array.isArray(result.data)?result.data[0]:result.data;
+    if(created?.id)localStorage.setItem('mm_cash_session',created.id);
+    if($('#openingAmount'))$('#openingAmount').value='';
+    if($('#openingAmountUsd'))$('#openingAmountUsd').value='';
+    await loadAll();
+    showToastV1043('Caja abierta correctamente.','success');
+  }catch(error){
+    console.error('Apertura única V13.14:',error);
+    showToastV1043(error?.message||'No se pudo abrir la caja.','error');
+  }finally{
+    setCashOpeningBusyV1314(false);
+  }
+};
+
+function bindCashOpeningV1314(){
+  const button=$('#openCashBtn');
+  if(button)button.onclick=openCash;
+}
+setTimeout(bindCashOpeningV1314,1450);
+window.addEventListener('load',()=>setTimeout(bindCashOpeningV1314,350),{once:true});
