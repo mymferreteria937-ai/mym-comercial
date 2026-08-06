@@ -6,7 +6,7 @@
 
 create extension if not exists pgcrypto;
 
-create table if not exists business_units (
+create table if not exists public.business_units (
   id uuid primary key default gen_random_uuid(),
   code text not null unique,
   name text not null,
@@ -17,7 +17,7 @@ create table if not exists business_units (
   created_at timestamptz not null default now()
 );
 
-insert into business_units (code, name, description, color)
+insert into public.business_units (code, name, description, color)
 values
   ('FER', 'MM Ferretería', 'Ferretería, construcción, herramientas, eléctrico, pintura, plomería y materiales.', '#F97316'),
   ('LIB', 'MM Librería', 'Librería, escolar, oficina, papelería, arte, tintas y consumibles.', '#3B82F6')
@@ -27,11 +27,18 @@ on conflict (code) do update set
   color=excluded.color,
   status='ACTIVE';
 
-alter table categories add column if not exists business_unit_id uuid references business_units(id);
-alter table products add column if not exists business_unit_id uuid references business_units(id);
-alter table suppliers add column if not exists business_unit_id uuid references business_units(id);
-alter table sale_items add column if not exists business_unit_id uuid references business_units(id);
-alter table sales add column if not exists business_unit_mix jsonb default '{}'::jsonb;
+alter table if exists public.categories add column if not exists business_unit_id uuid references public.business_units(id);
+alter table if exists public.products add column if not exists business_unit_id uuid references public.business_units(id);
+alter table if exists public.suppliers add column if not exists business_unit_id uuid references public.business_units(id);
+alter table if exists public.sale_items add column if not exists business_unit_id uuid references public.business_units(id);
+alter table if exists public.sales add column if not exists business_unit_mix jsonb default '{}'::jsonb;
+
+-- La aplicación consulta esta tabla con la clave pública de Supabase.
+-- Se explicitan permisos para proyectos donde los privilegios por defecto
+-- fueron endurecidos o modificados.
+alter table public.business_units disable row level security;
+grant usage on schema public to anon, authenticated;
+grant select on table public.business_units to anon, authenticated;
 
 -- Clasificación de categorías de librería.
 update categories c
@@ -120,3 +127,9 @@ from business_units bu
 left join sale_items si on si.business_unit_id = bu.id
 group by bu.code, bu.name
 order by bu.code;
+
+grant select on table public.v_mm_productos_por_unidad to anon, authenticated;
+grant select on table public.v_mm_ventas_por_unidad to anon, authenticated;
+
+-- Fuerza a PostgREST a reconocer inmediatamente la tabla y sus columnas.
+notify pgrst, 'reload schema';

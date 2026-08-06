@@ -6316,7 +6316,9 @@ openCash=async function(){
   const u=currentUserV6();
   const boxId=$('#cashBoxName')?.value;
   const box=cashBoxes.find(item=>String(item.id)===String(boxId));
-  if(!boxId||!box)return showToastV1043('Selecciona una caja válida.','error');
+  if(!boxId)return showToastV1043('Selecciona una caja.','error');
+  const boxName=box?.name||box?.box_name||boxId;
+  const persistentBoxId=box?.id||null;
 
   const openingNio=Number($('#openingAmount')?.value||0);
   const openingUsd=Number($('#openingAmountUsd')?.value||0);
@@ -6327,8 +6329,8 @@ openCash=async function(){
   setCashOpeningBusyV1314(true);
   try{
     const result=await sb.rpc('open_cash_session_v1314',{
-      p_cash_box_id:box.id,
-      p_box_name:box.name||box.box_name||'Caja',
+      p_cash_box_id:persistentBoxId,
+      p_box_name:boxName,
       p_cashier_name:u.name,
       p_opened_by:u.id,
       p_opening_nio:openingNio,
