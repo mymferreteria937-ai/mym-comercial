@@ -56,25 +56,19 @@ set search_path=public
 as $$
 declare
   v_session public.cash_sessions;
-  v_box_key text;
 begin
-  if p_cash_box_id is null and nullif(trim(p_box_name),'') is null then
+  if p_cash_box_id is null then
     raise exception 'INVALID_CASH_BOX';
   end if;
   if coalesce(p_opening_nio,0)<0 or coalesce(p_opening_usd,0)<0 then
     raise exception 'INVALID_OPENING_AMOUNT';
   end if;
 
-  v_box_key:=coalesce(p_cash_box_id::text,lower(trim(p_box_name)));
-  perform pg_advisory_xact_lock(hashtext('MYM_CASH_BOX:'||v_box_key));
+  perform pg_advisory_xact_lock(hashtext('MYM_CASH_BOX:'||p_cash_box_id::text));
 
   if exists (
     select 1 from public.cash_sessions
-    where (
-        (p_cash_box_id is not null and cash_box_id=p_cash_box_id)
-        or
-        (p_cash_box_id is null and cash_box_id is null and lower(trim(box_name))=lower(trim(p_box_name)))
-      )
+    where cash_box_id=p_cash_box_id
       and upper(coalesce(status,''))='OPEN'
   ) then
     raise exception 'CASH_BOX_ALREADY_OPEN';

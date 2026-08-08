@@ -1,6 +1,15 @@
-# MYM Comercial ERP V13.14
+# MYM Comercial ERP V13.16
 
-Entrega consolidada de MYM Comercial ERP. La aplicación, módulos, formularios y documentación operativa utilizan una sola versión: **V13.14**.
+Entrega consolidada basada en V13.14 Apertura Caja Única, con el nuevo módulo independiente de cotizaciones.
+
+## Cambios V13.16
+
+- Creación de cotizaciones para clientes registrados o eventuales.
+- Productos, cantidades y precios editables sin afectar inventario.
+- Descuento, vigencia, notas y condiciones comerciales.
+- Numeración automática e historial por estado.
+- Impresión en papel carta, descarga PDF y ticket térmico de 80 mm.
+- Migración independiente que no modifica usuarios, sesiones, caja ni ventas.
 
 ## Cambios V13.14
 
@@ -45,6 +54,7 @@ No configure `app` como Root Directory, porque eso excluiría el sitio web públ
 
 - Dashboard multiunidad.
 - POS, inventario, clientes, cajas y etiquetas.
+- Cotizaciones con historial, PDF e impresión térmica.
 - Impresión y reimpresión térmica.
 - Ventas y ganancia diaria.
 - Historial filtrable por fecha.
@@ -66,6 +76,7 @@ Ejecute una sola vez antes de publicar:
 2. `supabase/schema_v13_9_eliminar_productos.sql`
 3. `supabase/schema_v13_11_anulacion_auditable.sql`
 4. `supabase/schema_v13_14_presentaciones_producto.sql`
+5. `supabase/schema_v13_16_cotizaciones.sql`
 
 La migración convierte los precios automáticos existentes a margen real sobre
 la venta. Los productos marcados con precio manual no se modifican.

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MYM Comercial ERP V13.10</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="styles.css?v=1314">
+  <link rel="stylesheet" href="styles.css?v=1316-cotizaciones">
 </head>
 <body class="auth-locked">
   <div id="loginPortal" class="login-portal">
@@ -64,6 +64,7 @@
       <button class="active" data-view="dashboard">Dashboard</button>
       <button data-view="pos">POS Pro</button>
       <button data-view="clients">Clientes CRM</button>
+      <button data-view="quotations">Cotizaciones</button>
       <button data-view="products">Inventario</button>
       <button data-view="barcode">Códigos / Etiquetas</button>
       <button data-view="cash">Cajas y Cierres</button>
@@ -142,6 +143,89 @@
         <div class="panel"><div class="toolbar"><input id="clientFilter" placeholder="Buscar cliente"><button id="newClientBtn">Nuevo</button></div><table id="clientsTable"></table></div>
       </div>
       <div class="panel"><h3>Inteligencia de clientes</h3><table id="clientInsights"></table></div>
+    </section>
+
+    <section id="quotations" class="view quotations-view-v1315">
+      <div class="quotation-hero-v1315 panel">
+        <div>
+          <span class="eyebrow">Ventas antes de la venta</span>
+          <h2>Cotizaciones</h2>
+          <p>Prepara precios para tus clientes, guarda el historial y entrega la propuesta en PDF, papel carta o ticket térmico.</p>
+        </div>
+        <button id="newQuotationBtnV1315" class="primary" type="button">Nueva cotización</button>
+      </div>
+
+      <div class="quotation-editor-v1315">
+        <form id="quotationFormV1315" class="panel quotation-form-v1315">
+          <input id="quotationIdV1315" type="hidden">
+          <div class="quotation-form-head-v1315">
+            <div><h3 id="quotationFormTitleV1315">Nueva cotización</h3><p id="quotationNumberV1315">El número se asignará al guardar.</p></div>
+            <span id="quotationStatusV1315" class="status-pill active">Borrador</span>
+          </div>
+
+          <div class="quotation-customer-grid-v1315">
+            <label>Cliente registrado
+              <select id="quotationCustomerV1315"><option value="">Cliente eventual</option></select>
+            </label>
+            <label>Nombre / razón social
+              <input id="quotationCustomerNameV1315" required placeholder="Nombre del cliente">
+            </label>
+            <label>Teléfono
+              <input id="quotationCustomerPhoneV1315" placeholder="Teléfono">
+            </label>
+            <label>Correo
+              <input id="quotationCustomerEmailV1315" type="email" placeholder="Correo">
+            </label>
+            <label class="span-2-v1315">Dirección
+              <input id="quotationCustomerAddressV1315" placeholder="Dirección">
+            </label>
+            <label>Válida hasta
+              <input id="quotationValidUntilV1315" type="date" required>
+            </label>
+            <label>Descuento C$
+              <input id="quotationDiscountV1315" type="number" min="0" step="0.01" value="0">
+            </label>
+          </div>
+
+          <div class="quotation-product-picker-v1315">
+            <label>Agregar producto
+              <input id="quotationProductSearchV1315" autocomplete="off" placeholder="Código, nombre, marca o código de barras">
+            </label>
+            <div id="quotationProductResultsV1315" class="quotation-search-results-v1315"></div>
+          </div>
+
+          <div class="table-scroll quotation-items-wrap-v1315">
+            <table id="quotationItemsV1315"></table>
+          </div>
+
+          <div class="quotation-bottom-v1315">
+            <label>Notas y condiciones
+              <textarea id="quotationNotesV1315" rows="4" placeholder="Tiempo de entrega, condiciones de pago u observaciones"></textarea>
+            </label>
+            <div class="quotation-totals-v1315">
+              <div><span>Subtotal</span><b id="quotationSubtotalV1315">C$ 0.00</b></div>
+              <div><span>Descuento</span><b id="quotationDiscountTotalV1315">C$ 0.00</b></div>
+              <div class="total"><span>Total</span><strong id="quotationTotalV1315">C$ 0.00</strong></div>
+            </div>
+          </div>
+
+          <div class="quotation-actions-v1315">
+            <button id="saveQuotationBtnV1315" class="primary" type="submit">Guardar cotización</button>
+            <button id="previewQuotationBtnV1315" class="ghost" type="button">Vista previa</button>
+            <button id="printQuotationBtnV1315" class="ghost" type="button">Imprimir / Guardar PDF</button>
+            <button id="downloadQuotationPdfBtnV1315" class="ghost" type="button">Descargar PDF</button>
+            <button id="printQuotationTicketBtnV1315" class="ghost" type="button">Ticket 80 mm</button>
+          </div>
+        </form>
+
+        <div class="panel quotation-history-v1315">
+          <div class="table-toolbar">
+            <div><h3>Historial</h3><p>Cotizaciones guardadas y seguimiento comercial.</p></div>
+            <input id="quotationHistorySearchV1315" placeholder="Buscar número o cliente">
+          </div>
+          <div class="table-scroll"><table id="quotationHistoryV1315"></table></div>
+        </div>
+      </div>
     </section>
 
     <section id="products" class="view">
@@ -653,6 +737,7 @@
   <div id="ticketModal" class="modal hidden"><div class="modalCard"><div id="ticket80"></div><div class="modalActions"><button onclick="printTicket()" class="primary">Imprimir ticket</button><button onclick="closeTicket()" class="ghost">Cerrar</button></div></div></div>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-  <script src="app.js?v=1314-caja-compatible"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="app.js?v=1316-cotizaciones"></script>
 </body>
 </html>

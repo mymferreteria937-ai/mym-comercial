@@ -6316,9 +6316,7 @@ openCash=async function(){
   const u=currentUserV6();
   const boxId=$('#cashBoxName')?.value;
   const box=cashBoxes.find(item=>String(item.id)===String(boxId));
-  if(!boxId)return showToastV1043('Selecciona una caja.','error');
-  const boxName=box?.name||box?.box_name||boxId;
-  const persistentBoxId=box?.id||null;
+  if(!boxId||!box)return showToastV1043('Selecciona una caja válida.','error');
 
   const openingNio=Number($('#openingAmount')?.value||0);
   const openingUsd=Number($('#openingAmountUsd')?.value||0);
@@ -6329,8 +6327,8 @@ openCash=async function(){
   setCashOpeningBusyV1314(true);
   try{
     const result=await sb.rpc('open_cash_session_v1314',{
-      p_cash_box_id:persistentBoxId,
-      p_box_name:boxName,
+      p_cash_box_id:box.id,
+      p_box_name:box.name||box.box_name||'Caja',
       p_cashier_name:u.name,
       p_opened_by:u.id,
       p_opening_nio:openingNio,
@@ -6368,3 +6366,285 @@ function bindCashOpeningV1314(){
 }
 setTimeout(bindCashOpeningV1314,1450);
 window.addEventListener('load',()=>setTimeout(bindCashOpeningV1314,350),{once:true});
+
+
+/* =========================================================
+   V13.16 - Módulo independiente de cotizaciones
+   ========================================================= */
+const MYM_APP_VERSION_V1316='V13.16';
+let quotationsV1315=[];
+let quotationItemsV1315=[];
+let activeQuotationV1315=null;
+
+function quotationActorIdV1316(){
+  const id=String(currentUserV6()?.id||currentUserV114?.id||localStorage.getItem('mm_user_id')||'').trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)?id:null;
+}
+function quoteMoneyV1315(value){
+  return `C$ ${Number(value||0).toLocaleString('es-NI',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+}
+function dateManaguaV1315(value){
+  if(!value)return '-';
+  return new Date(value).toLocaleString('es-NI',{timeZone:'America/Managua',dateStyle:'short',timeStyle:'short'});
+}
+async function rpcQuotationV1316(name,args){
+  const result=await sb.rpc(name,args);
+  if(result.error)throw result.error;
+  const data=result.data;
+  if(data?.ok===false)throw new Error(data.message||data.code||'Operación rechazada.');
+  return data;
+}
+function quotationErrorMessageV1316(error){
+  const raw=String(error?.message||error||'No se pudo completar la operación.');
+  const map={
+    NOT_AUTHORIZED:'Tu usuario no tiene permiso para gestionar cotizaciones.',
+    CUSTOMER_REQUIRED:'Ingresa el nombre del cliente.',
+    ITEMS_REQUIRED:'Agrega al menos un producto.',
+    INVALID_QUOTATION_ITEM:'Revisa las cantidades y precios de los productos.',
+    QUOTATION_NOT_EDITABLE:'Esta cotización ya no se puede editar por su estado.',
+    QUOTATION_NOT_FOUND:'No se encontró la cotización.',
+    INVALID_STATUS:'El estado seleccionado no es válido.'
+  };
+  const code=Object.keys(map).find(key=>raw.includes(key));
+  if(code)return map[code];
+  if(raw.includes('mm_')&&raw.includes('does not exist'))return 'Primero ejecuta schema_v13_16_cotizaciones.sql en Supabase.';
+  return raw;
+}
+// Permisos y navegación de cotizaciones.
+if(!PERMISSION_CATALOG_V8.some(([key])=>key==='quotations'))PERMISSION_CATALOG_V8.splice(3,0,['quotations','Cotizaciones']);
+ROLE_PERMISSIONS_V8.ADMIN.quotations=true;
+ROLE_PERMISSIONS_V8.SUPERVISOR.quotations=true;
+ROLE_PERMISSIONS_V8.CAJERO.quotations=true;
+ROLE_PERMISSIONS_V8.BODEGA.quotations=false;
+ROLE_PERMISSIONS_V8.CONSULTA.quotations=true;
+
+function quotationDefaultDateV1315(){
+  const date=new Date();date.setDate(date.getDate()+15);return date.toISOString().slice(0,10);
+}
+function quotationTotalsV1315(){
+  const subtotal=quotationItemsV1315.reduce((sum,item)=>sum+Number(item.quantity||0)*Number(item.unit_price||0),0);
+  const discount=Math.min(subtotal,Math.max(0,Number($('#quotationDiscountV1315')?.value||0)));
+  return {subtotal,discount,total:subtotal-discount};
+}
+function renderQuotationTotalsV1315(){
+  const totals=quotationTotalsV1315();
+  if($('#quotationSubtotalV1315'))$('#quotationSubtotalV1315').textContent=quoteMoneyV1315(totals.subtotal);
+  if($('#quotationDiscountTotalV1315'))$('#quotationDiscountTotalV1315').textContent=quoteMoneyV1315(totals.discount);
+  if($('#quotationTotalV1315'))$('#quotationTotalV1315').textContent=quoteMoneyV1315(totals.total);
+}
+function renderQuotationItemsV1315(){
+  const table=$('#quotationItemsV1315');if(!table)return;
+  table.innerHTML='<tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Total</th><th></th></tr>'+
+    (quotationItemsV1315.length?quotationItemsV1315.map((item,index)=>`<tr>
+      <td class="quote-name-v1315"><b>${escapeHtmlV6(item.product_name)}</b><br><small>${escapeHtmlV6(item.product_code||'')}</small></td>
+      <td><input type="number" min="0.001" step="${String(item.unit_type||'').toUpperCase()==='UND'?'1':'0.001'}" value="${Number(item.quantity)}" onchange="updateQuotationItemV1315(${index},'quantity',this.value)"></td>
+      <td><input type="number" min="0" step="0.01" value="${Number(item.unit_price).toFixed(2)}" onchange="updateQuotationItemV1315(${index},'unit_price',this.value)"></td>
+      <td><b>${quoteMoneyV1315(Number(item.quantity)*Number(item.unit_price))}</b></td>
+      <td><button type="button" class="quote-remove-v1315" onclick="removeQuotationItemV1315(${index})">Quitar</button></td>
+    </tr>`).join(''):'<tr><td colspan="5" class="quotation-empty-v1315">Agrega productos para preparar la cotización.</td></tr>');
+  renderQuotationTotalsV1315();
+}
+window.updateQuotationItemV1315=function(index,field,value){
+  if(!quotationItemsV1315[index])return;
+  quotationItemsV1315[index][field]=Math.max(field==='quantity'?0.001:0,Number(value||0));
+  renderQuotationItemsV1315();
+};
+window.removeQuotationItemV1315=function(index){quotationItemsV1315.splice(index,1);renderQuotationItemsV1315();};
+window.addQuotationProductV1315=function(id){
+  const product=products.find(item=>String(item.id)===String(id));if(!product)return;
+  const existing=quotationItemsV1315.find(item=>String(item.product_id)===String(id));
+  if(existing)existing.quantity=Number(existing.quantity)+1;
+  else quotationItemsV1315.push({product_id:product.id,product_code:product.internal_code||product.barcode||'',product_name:product.name,unit_type:product.unit_type||'UND',quantity:1,unit_price:Number(product.sale_price||0)});
+  const search=$('#quotationProductSearchV1315');if(search)search.value='';
+  $('#quotationProductResultsV1315')?.classList.remove('show');renderQuotationItemsV1315();
+};
+function renderQuotationProductSearchV1315(){
+  const input=$('#quotationProductSearchV1315'),results=$('#quotationProductResultsV1315');if(!input||!results)return;
+  const query=input.value.toLowerCase().trim();
+  if(!query){results.classList.remove('show');results.innerHTML='';return;}
+  const matches=products.filter(product=>{
+    if(String(product.status||'ACTIVE').toUpperCase()==='INACTIVE')return false;
+    return [product.internal_code,product.barcode,product.supplier_code,product.name,product.brand].join(' ').toLowerCase().includes(query);
+  }).slice(0,20);
+  results.innerHTML=matches.map(product=>`<button type="button" class="quotation-search-item-v1315" onclick="addQuotationProductV1315('${product.id}')"><span><b>${escapeHtmlV6(product.name)}</b><small>${escapeHtmlV6(product.internal_code||'')} · Stock ${Number(product.stock||0)}</small></span><b>${quoteMoneyV1315(product.sale_price)}</b></button>`).join('')||'<div class="quotation-empty-v1315">No se encontraron productos.</div>';
+  results.classList.add('show');
+}
+function fillQuotationCustomersV1315(){
+  const select=$('#quotationCustomerV1315');if(!select)return;
+  const current=select.value;
+  select.innerHTML='<option value="">Cliente eventual</option>'+clients.map(client=>`<option value="${client.id}">${escapeHtmlV6(client.name)}</option>`).join('');
+  if(clients.some(client=>client.id===current))select.value=current;
+}
+function selectQuotationCustomerV1315(){
+  const id=$('#quotationCustomerV1315')?.value;
+  const customer=clients.find(item=>String(item.id)===String(id));
+  if(!customer)return;
+  $('#quotationCustomerNameV1315').value=customer.name||'';
+  $('#quotationCustomerPhoneV1315').value=customer.phone||'';
+  $('#quotationCustomerEmailV1315').value=customer.email||'';
+  $('#quotationCustomerAddressV1315').value=customer.address||'';
+}
+function resetQuotationV1315(){
+  activeQuotationV1315=null;quotationItemsV1315=[];
+  $('#quotationFormV1315')?.reset();
+  if($('#quotationIdV1315'))$('#quotationIdV1315').value='';
+  if($('#quotationValidUntilV1315'))$('#quotationValidUntilV1315').value=quotationDefaultDateV1315();
+  if($('#quotationDiscountV1315'))$('#quotationDiscountV1315').value='0';
+  if($('#quotationFormTitleV1315'))$('#quotationFormTitleV1315').textContent='Nueva cotización';
+  if($('#quotationNumberV1315'))$('#quotationNumberV1315').textContent='El número se asignará al guardar.';
+  if($('#quotationStatusV1315'))$('#quotationStatusV1315').textContent='Borrador';
+  fillQuotationCustomersV1315();renderQuotationItemsV1315();
+}
+function quotationHeaderFromFormV1315(){
+  return {
+    customer_id:$('#quotationCustomerV1315')?.value||null,
+    customer_name:$('#quotationCustomerNameV1315')?.value?.trim()||'',
+    customer_phone:$('#quotationCustomerPhoneV1315')?.value?.trim()||null,
+    customer_email:$('#quotationCustomerEmailV1315')?.value?.trim()||null,
+    customer_address:$('#quotationCustomerAddressV1315')?.value?.trim()||null,
+    business_unit_id:null,
+    valid_until:$('#quotationValidUntilV1315')?.value||quotationDefaultDateV1315(),
+    notes:$('#quotationNotesV1315')?.value?.trim()||null,
+    discount:Number($('#quotationDiscountV1315')?.value||0)
+  };
+}
+function quotationDraftV1315(){
+  const totals=quotationTotalsV1315(),header=quotationHeaderFromFormV1315();
+  return {...header,id:$('#quotationIdV1315')?.value||null,quote_no:activeQuotationV1315?.quote_no||'BORRADOR',status:activeQuotationV1315?.status||'DRAFT',created_at:activeQuotationV1315?.created_at||new Date().toISOString(),...totals,items:quotationItemsV1315.map(item=>({...item,total:Number(item.quantity)*Number(item.unit_price)}))};
+}
+async function saveQuotationV1315(e){
+  e?.preventDefault();
+  const header=quotationHeaderFromFormV1315();
+  if(!header.customer_name)return alert('Ingrese el nombre del cliente.');
+  if(!quotationItemsV1315.length)return alert('Agregue al menos un producto.');
+  const button=$('#saveQuotationBtnV1315');if(button){button.disabled=true;button.textContent='Guardando...';}
+  try{
+    const data=await rpcQuotationV1316('mm_save_quotation_v1316',{
+      p_actor_id:quotationActorIdV1316(),p_quotation_id:$('#quotationIdV1315')?.value||null,
+      p_header:header,p_items:quotationItemsV1315
+    });
+    $('#quotationIdV1315').value=data.id;
+    activeQuotationV1315={...quotationDraftV1315(),...data,status:activeQuotationV1315?.status||'DRAFT'};
+    $('#quotationFormTitleV1315').textContent='Editar cotización';
+    $('#quotationNumberV1315').textContent=data.quote_no;
+    await loadQuotationsV1315();
+    showToastV1043('Cotización guardada correctamente.','success');
+  }catch(error){console.error(error);alert(quotationErrorMessageV1316(error));}
+  finally{if(button){button.disabled=false;button.textContent='Guardar cotización';}}
+}
+async function loadQuotationsV1315(){
+  if(!quotationActorIdV1316())return;
+  try{const data=await rpcQuotationV1316('mm_list_quotations_v1316',{p_actor_id:quotationActorIdV1316()});quotationsV1315=Array.isArray(data)?data:[];renderQuotationHistoryV1315();}
+  catch(error){console.warn('Cotizaciones:',error);quotationsV1315=[];renderQuotationHistoryV1315();}
+}
+function quoteStatusLabelV1315(status){return ({DRAFT:'Borrador',SENT:'Enviada',ACCEPTED:'Aceptada',REJECTED:'Rechazada',EXPIRED:'Vencida',CANCELLED:'Cancelada'})[status]||status;}
+function renderQuotationHistoryV1315(){
+  const table=$('#quotationHistoryV1315');if(!table)return;
+  const query=($('#quotationHistorySearchV1315')?.value||'').toLowerCase().trim();
+  const rows=quotationsV1315.filter(item=>!query||[item.quote_no,item.customer_name,item.status].join(' ').toLowerCase().includes(query));
+  table.innerHTML='<tr><th>Número</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Acciones</th></tr>'+rows.map(item=>`<tr>
+    <td><b>${escapeHtmlV6(item.quote_no)}</b><br><small>${dateManaguaV1315(item.created_at)}</small></td>
+    <td>${escapeHtmlV6(item.customer_name)}</td><td><b>${quoteMoneyV1315(item.total)}</b></td>
+    <td><select class="quote-status-v1315 ${item.status}" onchange="setQuotationStatusV1315('${item.id}',this.value)">${['DRAFT','SENT','ACCEPTED','REJECTED','EXPIRED','CANCELLED'].map(status=>`<option value="${status}" ${item.status===status?'selected':''}>${quoteStatusLabelV1315(status)}</option>`).join('')}</select></td>
+    <td><div class="quote-history-actions-v1315"><button type="button" onclick="openQuotationV1315('${item.id}')">Abrir</button><button type="button" onclick="printSavedQuotationV1315('${item.id}')">PDF</button></div></td>
+  </tr>`).join('')||'<tr><td colspan="5" class="quotation-empty-v1315">No hay cotizaciones guardadas.</td></tr>';
+}
+window.openQuotationV1315=async function(id){
+  try{
+    const data=await rpcQuotationV1316('mm_get_quotation_v1316',{p_actor_id:quotationActorIdV1316(),p_quotation_id:id});
+    const quote=data.quotation;activeQuotationV1315=quote;quotationItemsV1315=data.items||[];
+    $('#quotationIdV1315').value=quote.id;$('#quotationCustomerV1315').value=quote.customer_id||'';
+    $('#quotationCustomerNameV1315').value=quote.customer_name||'';$('#quotationCustomerPhoneV1315').value=quote.customer_phone||'';
+    $('#quotationCustomerEmailV1315').value=quote.customer_email||'';$('#quotationCustomerAddressV1315').value=quote.customer_address||'';
+    $('#quotationValidUntilV1315').value=quote.valid_until||quotationDefaultDateV1315();$('#quotationDiscountV1315').value=Number(quote.discount||0);
+    $('#quotationNotesV1315').value=quote.notes||'';$('#quotationFormTitleV1315').textContent='Editar cotización';
+    $('#quotationNumberV1315').textContent=quote.quote_no;$('#quotationStatusV1315').textContent=quoteStatusLabelV1315(quote.status);
+    renderQuotationItemsV1315();document.querySelector('#quotations')?.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(error){alert(quotationErrorMessageV1316(error));}
+};
+window.setQuotationStatusV1315=async function(id,status){
+  try{await rpcQuotationV1316('mm_set_quotation_status_v1316',{p_actor_id:quotationActorIdV1316(),p_quotation_id:id,p_status:status});await loadQuotationsV1315();}
+  catch(error){alert(quotationErrorMessageV1316(error));await loadQuotationsV1315();}
+};
+async function fetchQuotationForOutputV1315(id){
+  const data=await rpcQuotationV1316('mm_get_quotation_v1316',{p_actor_id:quotationActorIdV1316(),p_quotation_id:id});
+  return {...data.quotation,items:data.items||[]};
+}
+function quotationDocumentHtmlV1315(quote,{ticket=false}={}){
+  const items=quote.items||[];
+  const logo=new URL('assets/logo-mm-ferreteria.png',location.href).href;
+  const rows=items.map(item=>`<tr><td>${escapeHtmlV6(item.product_code||'')}</td><td>${escapeHtmlV6(item.product_name)}</td><td class="num">${Number(item.quantity).toLocaleString('es-NI')}</td><td class="num">${quoteMoneyV1315(item.unit_price)}</td><td class="num">${quoteMoneyV1315(Number(item.quantity)*Number(item.unit_price))}</td></tr>`).join('');
+  if(ticket)return `<div class="ticket-brand"><b>MYM FERRETERÍA</b><span>COTIZACIÓN</span></div><hr><div>No.: <b>${escapeHtmlV6(quote.quote_no)}</b></div><div>Fecha: ${dateManaguaV1315(quote.created_at)}</div><div>Válida hasta: ${escapeHtmlV6(quote.valid_until||'')}</div><div>Cliente: ${escapeHtmlV6(quote.customer_name)}</div><hr>${items.map(item=>`<div class="ticket-item"><b>${escapeHtmlV6(item.product_name)}</b><span>${Number(item.quantity)} x ${quoteMoneyV1315(item.unit_price)} <strong>${quoteMoneyV1315(Number(item.quantity)*Number(item.unit_price))}</strong></span></div>`).join('')}<hr><div class="ticket-total"><span>Subtotal</span><b>${quoteMoneyV1315(quote.subtotal)}</b></div><div class="ticket-total"><span>Descuento</span><b>${quoteMoneyV1315(quote.discount)}</b></div><div class="ticket-total grand"><span>TOTAL</span><b>${quoteMoneyV1315(quote.total)}</b></div>${quote.notes?`<hr><small>${escapeHtmlV6(quote.notes)}</small>`:''}<hr><div class="ticket-footer">Precios sujetos a vigencia y disponibilidad.<br>Esta cotización no descuenta inventario.</div>`;
+  return `<header class="quote-doc-head"><img src="${logo}" alt="MYM"><div><h1>COTIZACIÓN</h1><b>${escapeHtmlV6(quote.quote_no)}</b></div></header><section class="company"><b>MYM FERRETERÍA</b><span>Managua, Nicaragua</span></section><section class="quote-meta"><div><small>CLIENTE</small><b>${escapeHtmlV6(quote.customer_name)}</b><span>${escapeHtmlV6(quote.customer_phone||'')}</span><span>${escapeHtmlV6(quote.customer_email||'')}</span><span>${escapeHtmlV6(quote.customer_address||'')}</span></div><div><small>FECHA</small><b>${dateManaguaV1315(quote.created_at)}</b><small>VÁLIDA HASTA</small><b>${escapeHtmlV6(quote.valid_until||'')}</b></div></section><table><thead><tr><th>Código</th><th>Descripción</th><th class="num">Cantidad</th><th class="num">Precio</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table><section class="quote-doc-bottom"><div class="notes"><b>Notas y condiciones</b><p>${escapeHtmlV6(quote.notes||'Precios sujetos a disponibilidad durante la vigencia de esta cotización.')}</p></div><div class="totals"><div><span>Subtotal</span><b>${quoteMoneyV1315(quote.subtotal)}</b></div><div><span>Descuento</span><b>${quoteMoneyV1315(quote.discount)}</b></div><div class="grand"><span>Total</span><strong>${quoteMoneyV1315(quote.total)}</strong></div></div></section><footer>Gracias por cotizar con MYM FERRETERÍA · Este documento no representa una venta ni descuenta inventario.</footer>`;
+}
+function printQuotationA4V1315(quote){
+  const win=window.open('','mym_quotation_a4','width=1000,height=760');if(!win)return alert('Permita ventanas emergentes para imprimir.');
+  const content=quotationDocumentHtmlV1315(quote);
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtmlV6(quote.quote_no)} - MYM Ferretería</title><style>@page{size:letter;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#172033;font:13px Arial,sans-serif}.quote-doc-head{display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #f97316;padding-bottom:12px}.quote-doc-head img{width:120px;max-height:70px;object-fit:contain}.quote-doc-head h1{margin:0;color:#172033;font-size:28px}.quote-doc-head div{text-align:right}.company{display:flex;justify-content:space-between;padding:10px 0;color:#475569}.quote-meta{display:grid;grid-template-columns:1fr 230px;gap:25px;padding:14px;background:#f8fafc;border-radius:8px;margin:10px 0 18px}.quote-meta div{display:grid;gap:4px}.quote-meta small{font-size:10px;color:#64748b;font-weight:800}.quote-meta div:last-child{text-align:right}table{width:100%;border-collapse:collapse}th{background:#172033;color:#fff;padding:9px;text-align:left}td{padding:9px;border-bottom:1px solid #e2e8f0}.num{text-align:right;white-space:nowrap}.quote-doc-bottom{display:grid;grid-template-columns:1fr 280px;gap:25px;margin-top:18px}.notes{padding:12px;background:#f8fafc;border-radius:8px}.notes p{white-space:pre-wrap}.totals div{display:flex;justify-content:space-between;padding:7px}.totals .grand{border-top:2px solid #f97316;margin-top:5px;padding-top:10px}.totals strong{font-size:19px;color:#c2410c}footer{position:fixed;bottom:0;left:0;right:0;text-align:center;color:#64748b;font-size:10px;border-top:1px solid #e2e8f0;padding-top:6px}@media print{button{display:none}}</style></head><body>${content}</body></html>`);
+  win.document.close();setTimeout(()=>{win.focus();win.print();},350);
+}
+function printQuotationTicketV1315(quote){
+  const win=window.open('','mym_quotation_ticket','width=430,height=700');if(!win)return alert('Permita ventanas emergentes para imprimir.');
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title></title><style>@page{size:80mm auto;margin:0}*{box-sizing:border-box}body{width:80mm;margin:0;padding:0 4mm;color:#000;font:14px/1.3 Arial,sans-serif}.ticket-brand{text-align:center;margin:0 0 5px}.ticket-brand b{display:block;font-size:19px}.ticket-brand span{font-weight:800}.ticket-item{margin:6px 0}.ticket-item b{display:block}.ticket-item span,.ticket-total{display:flex;justify-content:space-between;gap:6px}.ticket-total.grand{font-size:17px;margin-top:4px}.ticket-footer{text-align:center;font-size:11px}hr{border:0;border-top:1px dashed #000;margin:6px 0}</style></head><body>${quotationDocumentHtmlV1315(quote,{ticket:true})}</body></html>`);
+  win.document.close();setTimeout(()=>{win.focus();win.print();},300);
+}
+function downloadQuotationPdfV1315(quote){
+  const JsPDF=window.jspdf?.jsPDF;if(!JsPDF)return printQuotationA4V1315(quote);
+  const doc=new JsPDF({unit:'mm',format:'letter'});let y=18;
+  const right=202;doc.setTextColor(23,32,51);doc.setFont('helvetica','bold');doc.setFontSize(18);doc.text('MYM FERRETERIA',14,y);
+  doc.setTextColor(234,88,12);doc.setFontSize(20);doc.text('COTIZACION',right,y,{align:'right'});y+=7;
+  doc.setTextColor(23,32,51);doc.setFontSize(10);doc.text(String(quote.quote_no||''),right,y,{align:'right'});doc.setDrawColor(249,115,22);doc.setLineWidth(1);doc.line(14,y+4,right,y+4);y+=13;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(`Cliente: ${quote.customer_name||''}`,14,y);doc.text(`Fecha: ${dateManaguaV1315(quote.created_at)}`,112,y);y+=5;
+  doc.text(`Telefono: ${quote.customer_phone||'-'}`,14,y);doc.text(`Valida hasta: ${quote.valid_until||'-'}`,112,y);y+=10;
+  const drawHeader=()=>{doc.setFillColor(23,32,51);doc.rect(14,y,188,8,'F');doc.setTextColor(255);doc.setFont('helvetica','bold');doc.text('Descripcion',16,y+5.5);doc.text('Cant.',138,y+5.5,{align:'right'});doc.text('Precio',169,y+5.5,{align:'right'});doc.text('Total',200,y+5.5,{align:'right'});doc.setTextColor(23,32,51);y+=10;};
+  drawHeader();doc.setFont('helvetica','normal');doc.setFontSize(8.5);
+  (quote.items||[]).forEach(item=>{
+    const lines=doc.splitTextToSize(`${item.product_code||''}  ${item.product_name||''}`,112);
+    const rowHeight=Math.max(7,lines.length*4+2);
+    if(y+rowHeight>245){doc.addPage();y=16;drawHeader();}
+    doc.text(lines,16,y+4);doc.text(Number(item.quantity).toLocaleString('es-NI'),138,y+4,{align:'right'});
+    doc.text(quoteMoneyV1315(item.unit_price),169,y+4,{align:'right'});doc.text(quoteMoneyV1315(Number(item.quantity)*Number(item.unit_price)),200,y+4,{align:'right'});
+    doc.setDrawColor(226,232,240);doc.line(14,y+rowHeight,202,y+rowHeight);y+=rowHeight;
+  });
+  if(y>220){doc.addPage();y=18;}y+=6;doc.setFont('helvetica','bold');doc.text('Subtotal',160,y,{align:'right'});doc.text(quoteMoneyV1315(quote.subtotal),200,y,{align:'right'});y+=6;
+  doc.text('Descuento',160,y,{align:'right'});doc.text(quoteMoneyV1315(quote.discount),200,y,{align:'right'});y+=7;doc.setFontSize(13);doc.setTextColor(194,65,12);doc.text('TOTAL',160,y,{align:'right'});doc.text(quoteMoneyV1315(quote.total),200,y,{align:'right'});y+=10;
+  if(quote.notes){doc.setTextColor(23,32,51);doc.setFontSize(9);doc.setFont('helvetica','bold');doc.text('Notas y condiciones',14,y);doc.setFont('helvetica','normal');doc.text(doc.splitTextToSize(String(quote.notes),120),14,y+5);}
+  doc.save(`${quote.quote_no||'cotizacion'}.pdf`);
+}
+function previewQuotationV1315(){
+  const quote=quotationDraftV1315();if(!quote.customer_name||!quote.items.length)return alert('Complete el cliente y agregue productos.');
+  openSystemModalV131({title:`Cotización ${escapeHtmlV6(quote.quote_no)}`,body:`<div style="max-height:65vh;overflow:auto;background:#fff;color:#172033;padding:18px;border-radius:12px">${quotationDocumentHtmlV1315(quote)}</div>`,actions:[{text:'Cerrar',className:'ghost',onClick:m=>m.classList.add('hidden')},{text:'Imprimir / PDF',className:'primary',onClick:m=>{m.classList.add('hidden');printQuotationA4V1315(quote);}}]});
+}
+window.printSavedQuotationV1315=async function(id){try{downloadQuotationPdfV1315(await fetchQuotationForOutputV1315(id));}catch(error){alert(quotationErrorMessageV1316(error));}};
+
+function bindQuotationsV1315(){
+  const form=$('#quotationFormV1315');if(form)form.onsubmit=saveQuotationV1315;
+  if($('#newQuotationBtnV1315'))$('#newQuotationBtnV1315').onclick=resetQuotationV1315;
+  if($('#quotationProductSearchV1315'))$('#quotationProductSearchV1315').oninput=renderQuotationProductSearchV1315;
+  if($('#quotationCustomerV1315'))$('#quotationCustomerV1315').onchange=selectQuotationCustomerV1315;
+  if($('#quotationDiscountV1315'))$('#quotationDiscountV1315').oninput=renderQuotationTotalsV1315;
+  if($('#quotationHistorySearchV1315'))$('#quotationHistorySearchV1315').oninput=renderQuotationHistoryV1315;
+  if($('#previewQuotationBtnV1315'))$('#previewQuotationBtnV1315').onclick=previewQuotationV1315;
+  if($('#printQuotationBtnV1315'))$('#printQuotationBtnV1315').onclick=()=>{const quote=quotationDraftV1315();if(!quote.customer_name||!quote.items.length)return alert('Complete la cotización.');printQuotationA4V1315(quote);};
+  if($('#downloadQuotationPdfBtnV1315'))$('#downloadQuotationPdfBtnV1315').onclick=()=>{const quote=quotationDraftV1315();if(!quote.customer_name||!quote.items.length)return alert('Complete la cotización.');downloadQuotationPdfV1315(quote);};
+  if($('#printQuotationTicketBtnV1315'))$('#printQuotationTicketBtnV1315').onclick=()=>{const quote=quotationDraftV1315();if(!quote.customer_name||!quote.items.length)return alert('Complete la cotización.');printQuotationTicketV1315(quote);};
+  fillQuotationCustomersV1315();if(!$('#quotationValidUntilV1315')?.value)resetQuotationV1315();
+}
+
+const showViewBaseV1315=showView;
+showView=function(id,button){
+  const result=showViewBaseV1315(id,button);
+  if(id==='quotations'){fillQuotationCustomersV1315();renderQuotationItemsV1315();loadQuotationsV1315();setTimeout(()=>$('#quotationProductSearchV1315')?.focus(),80);}
+  return result;
+};
+
+
+function initQuotationsV1316(){
+  if(document.querySelector('title'))document.querySelector('title').textContent='MYM Comercial ERP V13.16';
+  if(document.querySelector('.brand span'))document.querySelector('.brand span').textContent=MYM_APP_VERSION_V1316;
+  document.querySelectorAll('.version-pill').forEach(item=>item.textContent=MYM_APP_VERSION_V1316);
+  bindQuotationsV1315();
+  applyNavigationPermissionsV8();
+}
+setTimeout(initQuotationsV1316,1700);
+window.addEventListener('load',()=>setTimeout(initQuotationsV1316,450),{once:true});
